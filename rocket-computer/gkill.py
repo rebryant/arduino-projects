@@ -7,14 +7,14 @@ import signal
 import os
 import sys
 
-phrase = "ground_recorder.py"
+defaultPhrase = "ground_recorder.py"
 
 def findProcesses(phrase):
     result = []
     p = subprocess.run(["ps", "-a"], stdout = subprocess.PIPE)
     lines = str(p.stdout).split("\\n")
     for line in lines:
-        if line.find(phrase) >= 0:
+        if line.find("Python3") and line.find(phrase) >= 0:
             try:
                 pid = int(line.split()[0])
                 result.append(pid)
@@ -26,7 +26,7 @@ def run(name, args):
     if len(args) == 1 and args == '-h':
         print("Usage: %s PROGS" % name)
         return
-    phrases = args if len(args) > 0 else [phrase]
+    phrases = args if len(args) > 0 else [defaultPhrase]
     pcount = 0
     for phrase in phrases:
         plist = findProcesses(phrase)

@@ -18,7 +18,7 @@ import math
 
 
 def usage(name):
-    print("Usage: %s [-h] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER]" % name)
+    print("Usage: %s [-h] [-B] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER]" % name)
     
 def trim(s):
     while len(s) > 0 and s[-1] in "\r\n":
@@ -298,10 +298,14 @@ class SampleRecord:
         else:
             return None
 
-    def show(self, file):
+    def show(self, file, basic = False):
         a = self.acceleration()
-        args = (self.sequenceId, self.timeStamp, self.altitude, a, self.accelerationX, self.accelerationY, self.accelerationZ, self.frequency, self.reliability, self.rssi)
-        file.write("%d.  T = %.3f.  Alt = %.2f.  G's = %.2f (%.2f, %.2f, %.2f). SPS = %.2f.  Rcvd = %.1f%%.  RSSI = %d\n" % args)
+        if basic:
+            args = (self.timeStamp, self.altitude, a)
+            file.write("T = %.3f.  Altitude = %.2f.  Acceleration = %.2fg\n" % args) 
+        else:
+            args = (self.sequenceId, self.timeStamp, self.altitude, a, self.accelerationX, self.accelerationY, self.accelerationZ, self.frequency, self.reliability, self.rssi)
+            file.write("%d.  T = %.3f.  Alt = %.2f.  G's = %.2f (%.2f, %.2f, %.2f). SPS = %.2f.  Rcvd = %.1f%%.  RSSI = %d\n" % args)
 
 
 def formatSample(sampleTuple, sampler):
@@ -364,8 +368,10 @@ def run(name, args):
     retries = 10
     verbosity = 1
     senderId = None
+    simple = False
+    basic = False
 
-    optList, args = getopt.getopt(args, "hv:p:b:t:s:")
+    optList, args = getopt.getopt(args, "hBv:p:b:t:s:")
     for (opt, val) in optList:
         if opt == '-h':
             usage(name)
@@ -384,6 +390,8 @@ def run(name, args):
             retries = int(val)
         elif opt == '-s':
             senderId = val
+        elif opt == '-B':
+            basic = True
 
     if port is None:
         plist = findPorts()
@@ -400,13 +408,17 @@ def run(name, args):
 
 
     sampler = Sampler(port, baud, senderId, verbosity, retries)
+    lastTime = -1.0
     while True:
         tup = sampler.getNextSampleTuple()
         if tup is None:
             print("Exiting")
             return
         r = formatSample(tup, sampler)
-        r.show(sys.stdout)
+        t = r.timeStamp
+        if not basic or t > lastTime + 1.0:
+            lastTime = math.floor(t)
+            r.show(sys.stdout, basic = basic)
     
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
