@@ -9,7 +9,7 @@ import sys
 
 phrase = "ground_recorder.py"
 
-def findProcesses():
+def findProcesses(phrase):
     result = []
     p = subprocess.run(["ps", "-a"], stdout = subprocess.PIPE)
     lines = str(p.stdout).split("\\n")
@@ -22,20 +22,25 @@ def findProcesses():
                 pass
     return result
 
-def run():
+def run(name, args):
+    if len(args) == 1 and args == '-h':
+        print("Usage: %s PROGS" % name)
+        return
+    phrases = args if len(args) > 0 else [phrase]
     pcount = 0
-    plist = findProcesses()
-    for pid in plist:
-        try:
-            os.kill(pid, signal.SIGKILL)
-            print("Killed PID %d" % pid)
-            pcount += 1
-        except:
-            print("Couldn't kill PID %d" % pid)
+    for phrase in phrases:
+        plist = findProcesses(phrase)
+        for pid in plist:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                print("Killed PID %d" % pid)
+                pcount += 1
+            except:
+                print("Couldn't kill PID %d" % pid)
     print("Killed %d processes" % pcount)
 
 if __name__ == "__main__":
-    run()
+    run(sys.argv[0], sys.argv[1:])
     sys.exit(0)
 
             

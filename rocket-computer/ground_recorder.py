@@ -243,6 +243,7 @@ class Sampler:
                 sample = " ".join(fields[offset:offset+fps])
                 t = self.timeStamp()
                 self.sampleBuffer[sid] = (t, sample, rssi)
+                self.report(3, "Creating sample with time %.3f, sid %d" % (t, sid))
             offset += fps
         
 # How many sample tuples should be kept
@@ -274,6 +275,28 @@ class SampleRecord:
     
     def acceleration(self):
         return math.sqrt(self.accelerationX * self.accelerationX + self.accelerationY * self.accelerationY + self.accelerationZ * self.accelerationZ)
+
+    def getField(self, kwd):
+        if kwd == 'Sequence':
+            return self.sequenceId
+        elif kwd == 'Altitude':
+            return self.altitude
+        elif kwd == 'Acceleration':
+            return self.acceleration()
+        elif kwd == 'X-Acceleration':
+            return self.accelerationX
+        elif kwd == 'Y-Acceleration':
+            return self.accelerationY
+        elif kwd == 'Z-Acceleration':
+            return self.accelerationZ
+        elif kwd == 'Frequency':
+            return self.frequency
+        elif kwd == 'Reliability':
+            return self.reliability
+        elif kwd == 'RSSI':
+            return self.rssi
+        else:
+            return None
 
     def show(self, file):
         a = self.acceleration()
