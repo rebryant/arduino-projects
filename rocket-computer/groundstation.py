@@ -134,7 +134,7 @@ class Sampler:
         if received:
             self.receptionRate = 0.99 * self.receptionRate + 0.01
         else:
-            self.receptionRate = 0.99
+            self.receptionRate = 0.99 * self.receptionRate
 
     def getLine(self):
         failures = 0
@@ -197,7 +197,7 @@ class Sampler:
             self.error(False, "Line '%s'.  Couldn't parse rpt field" % line)
             return
         if rpt == 0:
-            self.report("Hit end of transmission")
+            self.report(2, "Hit end of transmission")
             return
         if rpt <= 0:
             self.error(False, "Line '%s'.  Invalid rpt field" % line)
@@ -250,6 +250,37 @@ sampleKeep = 100
 # Timings of last sampleWindow receptions.  Each entry is a tuple (secs, receivedCount)
 sampleHistory = []
 
+class SampleRecord:
+    timeStamp = 0.0
+    sequenceId = 0
+    altitude = 0.0
+    accelerationX = 0.0
+    accelerationY = 0.0
+    accelerationZ = 0.0
+    frequency = 0.0
+    reliability = 0.0
+    rssi = 0
+
+    def __init__(self, time = None, sid = None, alt = None, ax = None, ay = None , az = None, freq = None, rate=None, rssi=None):
+        self.timeStamp = time
+        self.sequenceId = sid
+        self.altitude = alt
+        self.accelerationX = ax
+        self.accelerationY = ay    
+        self.accelerationZ = az
+        self.frequency = freq
+        self.reliability = rate
+        self.rssi = rssi
+    
+    def acceleration(self):
+        return math.sqrt(self.accelerationX * self.accelerationX + self.accelerationY * self.accelerationY + self.accelerationZ * self.accelerationZ)
+
+    def show(self, file):
+        a = self.acceleration()
+        args = (self.sequenceId, self.timeStamp, self.altitude, a, self.accelerationX, self.accelerationY, self.accelerationZ, self.frequency, self.reliability, self.rssi)
+        file.write("%d.  T = %.3f.  Alt = %.2f.  G's = %.2f (%.2f, %.2f, %.2f). SPS = %.2f.  Rcvd = %.1f%%.  RSSI = %d\n" % args)
+
+
 def formatSample(sampleTuple, sampler):
     global sampleHistory
     global baseAltitude
@@ -298,7 +329,9 @@ def formatSample(sampleTuple, sampler):
     a = math.sqrt(ax*ax + ay*ay + az*az)
 
     rate = sampler.receptionRate * 100
-    print("%d.  T = %.3f.  Alt = %.2f.  G's = %.2f (%.2f, %.2f, %.2f). SPS = %.2f.  Rcvd = %.1f%%.  RSSI = %d" % (sid, secs, alt, a, ax, ay, az, freq, rate, rssi))
+    rec = SampleRecord(time = secs, sid = sid, alt = alt, ax = ax, ay = ay, az = az, freq = freq, rate = rate, rssi = rssi)
+    return rec
+
 
 
     
@@ -349,7 +382,8 @@ def run(name, args):
         if tup is None:
             print("Exiting")
             return
-        formatSample(tup, sampler)
+        r = formatSample(tup, sampler)
+        r.show(sys.stdout)
     
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
