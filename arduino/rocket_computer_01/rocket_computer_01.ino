@@ -6,9 +6,8 @@
 // Test while connected to USB
 #define TETHERED 1
 // Maximum number of transmissions
-// Set to 30 minutes, assuming 10 transmissions per second
-// #define MAX_TRANSMISSIONS (30*60*10)
-#define MAX_TRANSMISSIONS 10000
+// Set to 30 minutes, assuming 3 transmissions per second
+// #define MAX_TRANSMISSIONS (30*60*3)
 // Number of extra transmissions after hitting MAX
 #define EXTRA_TRANSMISSIONS 10
 // How many samples are included in each transmission
@@ -198,7 +197,7 @@ Adafruit_ADXL375 accel = Adafruit_ADXL375(12345);
 #define WIDTH_SEQUENCE 6
 // X, Y, Z accelerations -xxxx.yy
 #define WIDTH_ACCELERATION 9
-// Altitude -xxxx.xx
+// Altitude -xxx.xx
 #define WIDTH_ALTITUDE 8
 // Checksum HHHH
 #define WIDTH_CHECK 5
