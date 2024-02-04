@@ -7,7 +7,7 @@ import signal
 import os
 import sys
 
-defaultPhrase = "ground_recorder.py"
+defaultPhrase = "recorder.py"
 
 def findProcesses(phrase):
     result = []
