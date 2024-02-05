@@ -109,9 +109,9 @@ void setup() {
   digitalWrite(RFM95_RST, HIGH);
 
   Serial.begin(115200);
+#if PRINT
   while (!Serial) delay(1);
   delay(100);
-#if PRINT
   Serial.println("Rocket ground station");
 #endif
 
