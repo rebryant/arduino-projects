@@ -18,7 +18,12 @@ import math
 
 
 def usage(name):
-    print("Usage: %s [-h] [-B] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER]" % name)
+    print("Usage: %s [-h] [-B] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER]" % name)
+    print(" -h       Print this message")
+    print(" -L       Save samples to CSV log file")
+    print(" -B       Show only basic data")
+    print(" -S       Slow to ~ 1 sample per second")
+    print(" -v VERB  Verbosity level")
     
 def trim(s):
     while len(s) > 0 and s[-1] in "\r\n":
@@ -44,6 +49,23 @@ def readline(ser):
             failures += 1
     return line
     
+def logFileName():
+    n = datetime.datetime.now()
+    s = n.isoformat(sep='d', timespec='minutes')
+    clist = [c for c in s]
+    fclist = ["h" if c == ":" else c for c in clist]
+    return "log-" + "".join(fclist) + "m.csv"
+
+def addLog(logName, fields, first = False):
+    try:
+        lfile = open(logName, "w" if first else "a")
+    except:
+        print("Failed to add entry to log file %s" % logName)
+    lfile.write(",".join(fields) + "\n")
+    lfile.close()
+    
+    
+
 class Sampler:
     port = None
     baud = None
@@ -59,6 +81,7 @@ class Sampler:
     #   Sample payload.  Kept as string
     sampleBuffer = {}
     lastSampleId = -1
+    lastSampleTime = -2.0
     rpt = 1
     startTime = 0.0
 
@@ -76,6 +99,7 @@ class Sampler:
         self.reader = None
         self.sampleBuffer = {}
         self.lastSampleId = -1
+        self.lastSampleTime = -2.0
         self.done = False
         self.receptionRate = 1.0
         self.receptionCount = 0
@@ -115,6 +139,7 @@ class Sampler:
             self.report(2, "Connected to serial port %s at baud rate %d" % (self.port, self.baud)) 
             # New connection
             self.lastSampleId = -1
+            self.lastSampleTime = -2.0
             self.receptionRate = 1.0
             self.sampleBuffer = {}
             return
@@ -214,25 +239,39 @@ class Sampler:
             self.error(False, "Line '%s'.  Can't have %d fields with rpt = %d" % (line, len(fields), rpt))
             return
         fps = (len(fields)-3)//rpt
-        # See if this is start of new stream
-        maxSid = None
+        # See what samples are included
+        sidList = []
         offset = 3
         while offset < len(fields):
             try:
                 sid = int(fields[offset])
             except:
                 pass
-            maxSid = sid if maxSid is None else max(maxSid, sid)
-            offset += 3
+            sidList.append(sid)
+            offset += fps
 
         # See if sequence ID has shifted lower
-        if maxSid < self.lastSampleId:
+        if max(sidList) < self.lastSampleId:
             self.report(3, "Starting new stream")
             # Resetting stream
             self.lastSampleId = -1
+            self.lastSampleTime = -2.0
             self.receptionRate = 1.0
             self.sampleBuffer = {}
         
+        # Find out which Ids will be added
+        sidList = sorted([sid for sid in sidList if sid > self.lastSampleId and sid not in self.sampleBuffer])
+        # Determine interpolating values for times
+        t = self.timeStamp()
+        if (t-self.lastSampleTime) > 1.0:
+            self.lastSampleTime = t - 1.0
+        dt = t-self.lastSampleTime
+        incrT = dt/(len(sidList)+1)
+        sidTimes = {}
+        self.lastSampleTime += incrT
+        for sid in sidList:
+            sidTimes[sid] = self.lastSampleTime
+            self.lastSampleTime += incrT
         offset = 3
         while offset < len(fields):
             try:
@@ -241,9 +280,11 @@ class Sampler:
                 pass
             if sid > self.lastSampleId and sid not in self.sampleBuffer:
                 sample = " ".join(fields[offset:offset+fps])
-                t = self.timeStamp()
+                t = sidTimes[sid]
                 self.sampleBuffer[sid] = (t, sample, rssi)
                 self.report(3, "Creating sample with time %.3f, sid %d" % (t, sid))
+            else:
+                self.report(3, "Skipping sample with sid %d" % sid)
             offset += fps
         
 # How many sample tuples should be kept
@@ -307,6 +348,28 @@ class SampleRecord:
             args = (self.sequenceId, self.timeStamp, self.altitude, a, self.accelerationX, self.accelerationY, self.accelerationZ, self.frequency, self.reliability, self.rssi)
             file.write("%d.  T = %.3f.  Alt = %.2f.  G's = %.2f (%.2f, %.2f, %.2f). SPS = %.2f.  Rcvd = %.1f%%.  RSSI = %d\n" % args)
 
+    def csvHeader(self, logName, basic = False):
+        if basic:
+            fields = ["time", "altitude", "acceleration"]
+        else:
+            fields = ["sid", "time", "altitude", "acceleration", "acceleration-X", "acceleration-Y", "acceleration-Z", "SPS", "Reliability", "RSSI"]
+        addLog(logName, fields, True)
+
+    def csvLine(self, logName, basic = False):
+        if basic:
+            fields = ["%.3f" % self.timeStamp, "%.2f" % self.altitude, "%.2f" % self.acceleration()]
+        else:
+            fields = ["%d" % self.sequenceId,
+                      "%.3f" % self.timeStamp,
+                      "%.2f" % self.altitude,
+                      "%.2f" % self.acceleration(), 
+                      "%.2f" % self.accelerationX,
+                      "%.2f" % self.accelerationY,
+                      "%.2f" % self.accelerationZ, 
+                      "%.2f" % self.frequency,
+                      "%.1f" % self.reliability,
+                      "%d"   % self.rssi]
+        addLog(logName, fields, False)
 
 def formatSample(sampleTuple, sampler):
     global sampleHistory
@@ -315,32 +378,32 @@ def formatSample(sampleTuple, sampler):
     fields = sample.split()
     if len(fields) < 5:
         sampler.report(3, "Not enough fields in sample '%s'" % sample)
-        return
+        return None
     try:
         sid = int(fields[0])
     except:
         sampler.report(3, "Couldn't parse sample Id in '%s' (length=%d)" % (fields[0], len(fields[0])))
-        return
+        return None
     try:
         ax = float(fields[1])
     except:
         sampler.report(3, "Couldn't parse X acceleration in '%s' (length=%d)" % (fields[1], len(fields[1])))
-        return
+        return None
     try:
         ay = float(fields[2])
     except:
         sampler.report(3, "Couldn't parse Y acceleration in '%s' (length=%d)" % (fields[2], len(fields[2])))
-        return
+        return None
     try:
         az = float(fields[3])
     except:
         sampler.report(3, "Couldn't parse Z acceleration in '%s' (length=%d)" % (fields[3], len(fields[3])))
-        return
+        return None
     try:
         alt = float(fields[4])
     except:
         sampler.report(3, "Couldn't parse altitude in '%s' (length=%d)" % (fields[4], len(fields[4])))
-        return
+        return None
     if baseAltitude == 0.0:
         baseAltitude = alt
     ncount = sampler.receptionCount
@@ -368,10 +431,11 @@ def run(name, args):
     retries = 10
     verbosity = 1
     senderId = None
-    simple = False
+    slow = False
     basic = False
+    logName = None
 
-    optList, args = getopt.getopt(args, "hBv:p:b:t:s:")
+    optList, args = getopt.getopt(args, "hBSLv:p:b:t:s:")
     for (opt, val) in optList:
         if opt == '-h':
             usage(name)
@@ -392,6 +456,11 @@ def run(name, args):
             senderId = val
         elif opt == '-B':
             basic = True
+        elif opt == '-S':
+            slow = True
+        elif opt == '-L':
+            logName = logFileName()
+            print("Writing to log file %s" % logName)
 
     if port is None:
         plist = findPorts()
@@ -409,16 +478,24 @@ def run(name, args):
 
     sampler = Sampler(port, baud, senderId, verbosity, retries)
     lastTime = -1.0
+    first = True
     while True:
         tup = sampler.getNextSampleTuple()
         if tup is None:
             print("Exiting")
             return
         r = formatSample(tup, sampler)
+        if r is None:
+            continue
         t = r.timeStamp
-        if not basic or t > lastTime + 1.0:
+        if not slow or t > lastTime + 1.0:
             lastTime = math.floor(t)
             r.show(sys.stdout, basic = basic)
+        if logName is not None:
+            if first:
+                r.csvHeader(logName, basic)
+                first = False
+            r.csvLine(logName, basic)
     
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
