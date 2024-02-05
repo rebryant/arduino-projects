@@ -7,7 +7,7 @@
 #define TETHERED 1
 // Maximum number of transmissions
 // Set to 30 minutes, assuming 3 transmissions per second
-// #define MAX_TRANSMISSIONS (30*60*3)
+#define MAX_TRANSMISSIONS (30*60*3)
 // Number of extra transmissions after hitting MAX
 #define EXTRA_TRANSMISSIONS 10
 // How many samples are included in each transmission
@@ -406,7 +406,6 @@ void sample() {
       obuf[i] = ' ';
 // Make sure complete message is zero-terminated
 buf[BUFFER_LENGTH] = 0;
-packetnum++;
 if (packetnum > MAX_TRANSMISSIONS)
   setup_sampler(0);
 }
@@ -426,7 +425,7 @@ void loop() {
     digitalWrite(LED_BUILTIN, led_high ? HIGH : LOW);
   }
   sample();
-  if (packetnum % FREQ == 0) {
+  if ((packetnum + 1) % FREQ == 0) {
     rf95.send(buf, BUFFER_LENGTH);
     delay(SAMPLE_INTERVAL);
     rf95.waitPacketSent();
@@ -438,4 +437,5 @@ void loop() {
     Serial.println((char *) buf);
 #endif
   }
+  packetnum++;
 }
