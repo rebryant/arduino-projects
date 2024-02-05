@@ -6,7 +6,10 @@ import math
 import sys
 import getopt
 
-import ground_recorder
+import recorder
+
+devPrefix = "/dev/cu.usbmodem"
+
 
 class Grapher:
     sampler = None
@@ -25,6 +28,8 @@ class Grapher:
     duration = 10
     width = 1000
     height = 400
+    # Intermediate values for rounding numbers
+    roundingList = [1.0, 2.0, 5.0, 10.0]
 
     def __init__(self, tk, sampler, keywords):
         self.sampler = sampler
@@ -51,14 +56,10 @@ class Grapher:
             rval *= 10
             val = val / 10.0
         # val is now in [0.0, 10.0)
-        if val <= 1.0:
-            pass
-        elif val <= 2.0:
-            rval *= 2.0
-        elif val <= 5.0:
-            rval *= 5.0
-        else:
-            rval *= 10.0
+        for bound in self.roundingList:
+            if val < bound:
+                rval *= bound
+                break
         return -rval if neg else rval
     
     def normalizeSamples(self):
@@ -122,7 +123,7 @@ class Display:
             if tup is None:
                 print("Exiting")
                 return
-            r = ground_recorder.formatSample(tup, self.sampler)
+            r = recorder.formatSample(tup, self.sampler)
             if r is None:
                 break
             self.accelerationGrapher.addRecord(r)
@@ -139,7 +140,7 @@ def run(name, args):
     optList, args = getopt.getopt(args, "hv:p:b:t:s:")
     for (opt, val) in optList:
         if opt == '-h':
-            ground_recorder.usage(name)
+            recorder.usage(name)
             return
         elif opt == '-v':
             verbosity = int(val)
@@ -157,7 +158,7 @@ def run(name, args):
             senderId = val
 
     if port is None:
-        plist = ground_recorder.findPorts()
+        plist = recorder.findPorts()
         if len(plist) == 0:
             print("Can't find any devices starting with names '%s'" % devPrefix)
             return
@@ -169,7 +170,7 @@ def run(name, args):
                 print("  %s" % p)
             return
 
-    sampler = ground_recorder.Sampler(port, baud, senderId, verbosity, retries)
+    sampler = recorder.Sampler(port, baud, senderId, verbosity, retries)
     display = Display(sampler)
     display.run()
 
