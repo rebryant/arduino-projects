@@ -5,7 +5,6 @@
 # Sequence Id
 # X, Y, Z accelarations in m/s^2
 # Nominal altitude in m
-# 4-byte checksum
 
 import serial
 import sys
