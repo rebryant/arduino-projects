@@ -185,6 +185,7 @@ Adafruit_ADXL375 accel = Adafruit_ADXL375(12345);
 #define WIDTH_RPT 3
 // ID: 2 digit sender code
 #define WIDTH_SENDER 3
+// Total = 6
 
 // Header
 #define OFFSET_RPT    0
@@ -192,23 +193,23 @@ Adafruit_ADXL375 accel = Adafruit_ADXL375(12345);
 #define HEADER_LENGTH  (OFFSET_SENDER+WIDTH_SENDER)
 
 
+
 // Format data in fixed width fields.  Each field includes room for trailing blank
-// Sequence Number
+// Sequence Number xxxxx
 #define WIDTH_SEQUENCE 6
 // X, Y, Z accelerations -xxxx.yy
 #define WIDTH_ACCELERATION 9
 // Altitude -xxx.xx
 #define WIDTH_ALTITUDE 8
-// Checksum HHHH
-#define WIDTH_CHECK 5
+// Total = 6 + 27 + 8 = 41
+
 
 #define OFFSET_SEQUENCE 0
 #define OFFSET_X        (OFFSET_SEQUENCE+WIDTH_SEQUENCE)
 #define OFFSET_Y        (OFFSET_X+WIDTH_ACCELERATION)
 #define OFFSET_Z        (OFFSET_Y+WIDTH_ACCELERATION)
 #define OFFSET_ALTITUDE (OFFSET_Z+WIDTH_ACCELERATION)
-#define OFFSET_CHECK    (OFFSET_ALTITUDE+WIDTH_ALTITUDE)
-#define MESSAGE_LENGTH  (OFFSET_CHECK+WIDTH_CHECK)
+#define MESSAGE_LENGTH  (OFFSET_ALTITUDE+WIDTH_ALTITUDE)
 
 #define BUFFER_LENGTH (HEADER_LENGTH + RPT*MESSAGE_LENGTH)
 
@@ -359,17 +360,6 @@ void setup() {
   packetnum = 0;
 }
 
-uint32_t checksum(char *sbuf, int len) { 
-  uint32_t sum = 0;
-  for (int i = 0; i < len; i++) {
-    if (sbuf[i] == ' ') 
-      continue;
-    uint32_t residue = ((sum >> 15) & 0x1) + ((sum << 1) & 0xFFFE);
-    sum = residue ^ sbuf[i]; 
-  }
-  return sum;
- }
-
 
 // Grab data for one sample
 // Store in appropriate region of buffer
@@ -395,12 +385,6 @@ void sample() {
   snprintf(obuf+OFFSET_Z, WIDTH_ACCELERATION, "%.2f", Z);
   snprintf(obuf+OFFSET_ALTITUDE, WIDTH_ALTITUDE, "%.2f", altitude);
   // Turn null characters into blanks
-  for (int i = 0; i < MESSAGE_LENGTH; i++)
-    if (obuf[i] == 0)
-      obuf[i] = ' ';
-  // Create crude checksum;
-  uint32_t sum = checksum(obuf, OFFSET_CHECK);
-  utoa(sum, obuf+OFFSET_CHECK, HEX); // Turn null characters into blanks
   for (int i = 0; i < MESSAGE_LENGTH; i++)
     if (obuf[i] == 0)
       obuf[i] = ' ';
