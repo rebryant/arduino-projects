@@ -10,6 +10,26 @@ import recorder
 
 devPrefix = "/dev/cu.usbmodem"
 
+# Intermediate values for rounding numbers
+roundingList = [1.0, 2.0, 5.0, 10.0]
+def roundRange(val, lower = True):
+    if lower and val >= 0:
+        return 0.0
+    if not lower and val <= 0:
+        return 0.0
+    neg = val < 0
+    val = abs(val)
+    rval = 1.0
+    while (val >= 10.0):
+        rval *= 10
+        val = val / 10.0
+    # val is now in [0.0, 10.0)
+    for bound in self.roundingList:
+        if val < bound:
+            rval *= bound
+            break
+    return -rval if neg else rval
+
 
 class Grapher:
     sampler = None
@@ -28,8 +48,8 @@ class Grapher:
     duration = 10
     width = 1000
     height = 400
-    # Intermediate values for rounding numbers
-    roundingList = [1.0, 2.0, 5.0, 10.0]
+
+
 
     def __init__(self, tk, sampler, keywords):
         self.sampler = sampler
@@ -44,24 +64,7 @@ class Grapher:
         self.yMin = 0.0
         self.yMax = 0.0
 
-    def roundRange(self, val, lower = True):
-        if lower and val >= 0:
-            return 0.0
-        if not lower and val <= 0:
-            return 0.0
-        neg = val < 0
-        val = abs(val)
-        rval = 1.0
-        while (val >= 10.0):
-            rval *= 10
-            val = val / 10.0
-        # val is now in [0.0, 10.0)
-        for bound in self.roundingList:
-            if val < bound:
-                rval *= bound
-                break
-        return -rval if neg else rval
-    
+  
     def normalizeSamples(self):
         tmax = 0.0
         for k in self.keywords:

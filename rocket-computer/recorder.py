@@ -35,6 +35,9 @@ readTimeout = 15
 gravity = 9.80665
 baseAltitude = 0.0
 
+# What is assumed maximum spacing between samples
+maxGap = 0.2
+
 def findPorts():
     return glob.glob(devPrefix + "*")
 
@@ -262,8 +265,8 @@ class Sampler:
         sidList = sorted([sid for sid in sidList if sid > self.lastSampleId and sid not in self.sampleBuffer])
         # Determine interpolating values for times
         t = self.timeStamp()
-        if (t-self.lastSampleTime) > 1.0:
-            self.lastSampleTime = t - 1.0
+        if (t-self.lastSampleTime) > maxGap:
+            self.lastSampleTime = t - maxGap
         dt = t-self.lastSampleTime
         incrT = dt/(len(sidList)+1)
         sidTimes = {}
@@ -337,6 +340,12 @@ class SampleRecord:
             return self.rssi
         else:
             return None
+
+    # Found that initial sample often can have bogus altitude
+    def accept(self):
+        if self.sequenceId == 0 and self.altitude > 1000.0:
+            return False
+        return True
 
     def show(self, file, basic = False):
         a = self.acceleration()
@@ -484,6 +493,8 @@ def run(name, args):
             print("Exiting")
             return
         r = formatSample(tup, sampler)
+        if not r.accept():
+            continue
         if r is None:
             continue
         t = r.timeStamp
