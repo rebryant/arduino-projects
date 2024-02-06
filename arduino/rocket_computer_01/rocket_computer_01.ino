@@ -6,26 +6,28 @@
 // Test while connected to USB
 #define TETHERED 1
 // Maximum number of transmissions
-// Set to 30 minutes, assuming 3 transmissions per second
-#define MAX_TRANSMISSIONS (30*60*3)
+// Set to 30 minutes, assuming 10 transmissions per second
+#define MAX_TRANSMISSIONS (30*60*10)
 // Number of extra transmissions after hitting MAX
 #define EXTRA_TRANSMISSIONS 10
 // How many samples are included in each transmission
-#define RPT 4
+#define RPT 6
 // How often should the message be sent
 // Settting RPT = 4 and FREQ = 2 makes it so that each sample is included in 2 messages
-#define FREQ 2
+#define FREQ 6
 
 // Design notes
 // Challenge is to maximize number of samples per second received by receiver
 // Find that requiring acknowledgements slows things down
 // Instead, send each sample multiple times
-// Also pack multiple samples per message to reduce number of transmissions
+// Can pack multiple samples per message to reduce number of transmissions
 // Format message as ASCII string of fixed width with space character as separator.
 // LoRa message up to 255 bytes long with 4-byte header.  Max payload = 251 bytes
-// In current formulation, each message has 6-character header + 46 samples/character.
-// Send 4 samples per message = 190 bytes with send frequency of one message every 2 samples
+// In current formulation, each message has 5-character header + 41 samples/character.
+// Could send up to 6 samples per message = 251 bytes with send frequency of one message every 2 samples
 // Creates 2x redundancy
+// Found get better performance sending 2 samples per message with send frequence of one message every sample
+
 
 
 ////////////////// Includes for Radio
@@ -181,8 +183,8 @@ Adafruit_ADXL375 accel = Adafruit_ADXL375(12345);
 ////////////////// Definitions for Integration
 
 // Buffer stores Header + RPT copies of message
-// 2 digit max
-#define WIDTH_RPT 3
+// 1 digit max
+#define WIDTH_RPT 2
 // ID: 2 digit sender code
 #define WIDTH_SENDER 3
 // Total = 6
