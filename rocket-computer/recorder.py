@@ -14,15 +14,18 @@ import getopt
 import time
 import datetime
 import math
+import threading
 
 
 def usage(name):
-    print("Usage: %s [-h] [-B] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER]" % name)
+    print("Usage: %s [-h] [-B] [-S] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SENDER] [-k BSIZE]" % name)
     print(" -h       Print this message")
-    print(" -L       Save samples to CSV log file")
     print(" -B       Show only basic data")
     print(" -S       Slow to ~ 1 sample per second")
+    print(" -L       Save samples to CSV log file")
     print(" -v VERB  Verbosity level")
+    print(" -k BSIZE Buffer with up to BSIZE samples")
+
     
 def trim(s):
     while len(s) > 0 and s[-1] in "\r\n":
@@ -33,7 +36,6 @@ devPrefix = "/dev/cu.usbmodem"
 readTimeout = 15
 
 gravity = 9.80665
-baseAltitude = 0.0
 
 # What is assumed maximum spacing between samples
 maxGap = 0.2
@@ -111,6 +113,14 @@ class Sampler:
         if self.verbosity >= level:
             print(msg)
 
+    def newConnection(self):
+        # New connection
+        self.lastSampleId = -1
+        self.lastSampleTime = -2.0
+        self.receptionRate = 1.0
+        self.sampleBuffer = {}
+
+
     def timeStamp(self):
         dt = datetime.datetime.now() - self.startTime
         secs = dt.seconds + 1e-6 * dt.microseconds
@@ -138,12 +148,8 @@ class Sampler:
                 failures += 1
                 time.sleep(1)
                 continue
-            self.report(2, "Connected to serial port %s at baud rate %d" % (self.port, self.baud)) 
-            # New connection
-            self.lastSampleId = -1
-            self.lastSampleTime = -2.0
-            self.receptionRate = 1.0
-            self.sampleBuffer = {}
+            self.report(1, "Connected to serial port %s at baud rate %d" % (self.port, self.baud)) 
+            self.newConnection()
             return
         self.done = True
     
@@ -247,19 +253,17 @@ class Sampler:
         while offset < len(fields):
             try:
                 sid = int(fields[offset])
+                sidList.append(sid)
             except:
                 pass
-            sidList.append(sid)
             offset += fps
-
+        if len(sidList) == 0:
+            return
         # See if sequence ID has shifted lower
-        if max(sidList) < self.lastSampleId:
+        if  max(sidList) < self.lastSampleId:
             self.report(3, "Starting new stream")
             # Resetting stream
-            self.lastSampleId = -1
-            self.lastSampleTime = -2.0
-            self.receptionRate = 1.0
-            self.sampleBuffer = {}
+            self.newConnection()
         
         # Find out which Ids will be added
         sidList = sorted([sid for sid in sidList if sid > self.lastSampleId and sid not in self.sampleBuffer])
@@ -289,10 +293,84 @@ class Sampler:
                 self.report(3, "Skipping sample with sid %d" % sid)
             offset += fps
         
-# How many sample tuples should be kept
-sampleKeep = 100
-# Timings of last sampleWindow receptions.  Each entry is a tuple (secs, receivedCount)
-sampleHistory = []
+# FIFO that saves only bounded number of objects.
+# When hit size limit, drop oldest object(s)
+# Can be configured to have separate thread filling the buffer
+
+
+class DropBuffer:
+    maxSize = 1
+    buffer = []
+    cv = None
+    mutex = None
+    thread = None
+    filler = None
+    stop = False
+    
+    def __init__(self, maxSize):
+        self.maxSize = maxSize
+        self.buffer = []
+        self.cv = threading.Condition()
+        self.mutex = threading.Lock()
+        self.insertCount = 0
+        self.retrieveCount = 0
+        self.thread = None
+        self.filler = None
+        self.stop = False
+
+    def insert(self, object):
+        with self.cv:
+            self.buffer.append(object)
+            if len(self.buffer) > self.maxSize:
+                self.buffer = self.buffer[-self.maxSize:]
+            self.cv.notify()
+        
+    def retrieve(self):
+        with self.cv:
+            while len(self.buffer) == 0:
+                self.cv.wait()
+            object = self.buffer[0]
+            self.buffer = self.buffer[1:]
+        return object
+        
+    def threadRoutine(self):
+        while True:
+            self.mutex.acquire()
+            if self.stop:
+                break
+            self.mutex.release()
+            object = self.filler()
+            self.insert(object)
+        self.mutex.release()
+
+    def keepFilled(self, filler):
+        self.filler = filler
+        self.thread = threading.Thread(target=self.threadRoutine)
+        self.thread.start()
+
+    def statistics(self):
+        return (self.insertCount, self.retrieveCount)
+
+    def terminate(self):
+        self.mutex.acquire()
+        self.stop = True
+        self.mutex.release()
+        self.thread.join()
+
+
+class BufferedSampler(Sampler):
+    buffer = None
+
+    def __init__(self, port, baud, senderId, verbosity, retries, bufSize):
+        super().__init__(port, baud, senderId, verbosity, retries)
+        self.buffer = DropBuffer(bufSize)
+        self.buffer.keepFilled(super().getNextSampleTuple)
+
+    def getNextSampleTuple(self):
+        return self.buffer.retrieve()
+
+    def statistics(self):
+        return self.buffer.statistics()
 
 class SampleRecord:
     timeStamp = 0.0
@@ -316,27 +394,42 @@ class SampleRecord:
         self.reliability = rate
         self.rssi = rssi
     
-    def acceleration(self):
-        return math.sqrt(self.accelerationX * self.accelerationX + self.accelerationY * self.accelerationY + self.accelerationZ * self.accelerationZ)
+    # Find magnitude of acceleration among some subset of X, Y, and Z axes.  Specify with substring of "xyz"
+    def acceleration(self, dimensions = None):
+        if dimensions is None or dimensions == "":
+            dimensions = "xyz"
+        sval = 0.0
+        if "x" in dimensions:
+            sval += self.accelerationX * self.accelerationX
+        if "y" in dimensions:
+            sval += self.accelerationY * self.accelerationY
+        if "z" in dimensions:
+            sval += self.accelerationZ * self.accelerationZ
+        return math.sqrt(sval)
 
     def getField(self, kwd):
-        if kwd == 'Sequence':
+        kwd = kwd.lower()
+        if kwd == 'sequence':
             return self.sequenceId
-        elif kwd == 'Altitude':
+        elif kwd == 'altitude':
             return self.altitude
-        elif kwd == 'Acceleration':
-            return self.acceleration()
-        elif kwd == 'X-Acceleration':
+        elif kwd == 'acceleration-x':
             return self.accelerationX
-        elif kwd == 'Y-Acceleration':
+        elif kwd == 'acceleration-y':
             return self.accelerationY
-        elif kwd == 'Z-Acceleration':
+        elif kwd == 'acceleration-z':
             return self.accelerationZ
-        elif kwd == 'Frequency':
+        elif kwd.find('acceleration') > 0:
+            dimension = ""
+            for d in ["x", "y", "z"]:
+                if d in kwd:
+                    dimension += d
+            return self.acceleration(dimension)
+        elif kwd == 'frequency':
             return self.frequency
-        elif kwd == 'Reliability':
+        elif kwd == 'reliability':
             return self.reliability
-        elif kwd == 'RSSI':
+        elif kwd == 'rssi':
             return self.rssi
         else:
             return None
@@ -379,58 +472,78 @@ class SampleRecord:
                       "%d"   % self.rssi]
         addLog(logName, fields, False)
 
-def formatSample(sampleTuple, sampler):
-    global sampleHistory
-    global baseAltitude
-    (secs, sample, rssi) = sampleTuple
-    fields = sample.split()
-    if len(fields) < 5:
-        sampler.report(3, "Not enough fields in sample '%s'" % sample)
-        return None
-    try:
-        sid = int(fields[0])
-    except:
-        sampler.report(3, "Couldn't parse sample Id in '%s' (length=%d)" % (fields[0], len(fields[0])))
-        return None
-    try:
-        ax = float(fields[1])
-    except:
-        sampler.report(3, "Couldn't parse X acceleration in '%s' (length=%d)" % (fields[1], len(fields[1])))
-        return None
-    try:
-        ay = float(fields[2])
-    except:
-        sampler.report(3, "Couldn't parse Y acceleration in '%s' (length=%d)" % (fields[2], len(fields[2])))
-        return None
-    try:
-        az = float(fields[3])
-    except:
-        sampler.report(3, "Couldn't parse Z acceleration in '%s' (length=%d)" % (fields[3], len(fields[3])))
-        return None
-    try:
-        alt = float(fields[4])
-    except:
-        sampler.report(3, "Couldn't parse altitude in '%s' (length=%d)" % (fields[4], len(fields[4])))
-        return None
-    if baseAltitude == 0.0:
-        baseAltitude = alt
-    ncount = sampler.receptionCount
-    sampleHistory.append((secs, ncount))
-    if len(sampleHistory) > sampleKeep:
-        sampleHistory = sampleHistory[-sampleKeep:]
-    osecs, ocount = sampleHistory[0]
-    freq = 0.0 if ocount == ncount else float(ncount-ocount)/(secs-osecs)
-    alt = alt-baseAltitude
-    ax /= gravity
-    ay /= gravity
-    az /= gravity
-    a = math.sqrt(ax*ax + ay*ay + az*az)
+def minMax(x, xmin, xmax):
+    xmin = x if xmin is None else min(x, xmin) 
+    xmax = x if xmax is None else max(x, xmax)     
+    return (xmin, xmax)
 
-    rate = sampler.receptionRate * 100
-    rec = SampleRecord(time = secs, sid = sid, alt = alt, ax = ax, ay = ay, az = az, freq = freq, rate = rate, rssi = rssi)
-    return rec
+class Formatter:
 
+    sampler = None
+    # How many sample tuples should be kept
+    sampleKeep = 100
+    # Timings of last sampleKeep receptions.  Each entry is a tuple (secs, receivedCount)
+    sampleHistory = []
+    # Allow recallibration of altimeter
+    baseAltitude = None
+    minAltitude = None
+    maxAltitude = None
+    minAcceleration = None
+    maxAcceleration = None
 
+    def __init__(self, sampler):
+        self.sampler = sampler
+        
+    def formatSample(self, sampleTuple):
+        (secs, sample, rssi) = sampleTuple
+        fields = sample.split()
+        if len(fields) < 5:
+            self.sampler.report(3, "Not enough fields in sample '%s'" % sample)
+            return None
+        try:
+            sid = int(fields[0])
+        except:
+            self.sampler.report(3, "Couldn't parse sample Id in '%s' (length=%d)" % (fields[0], len(fields[0])))
+            return None
+        try:
+            ax = float(fields[1])
+        except:
+            self.sampler.report(3, "Couldn't parse X acceleration in '%s' (length=%d)" % (fields[1], len(fields[1])))
+            return None
+        try:
+            ay = float(fields[2])
+        except:
+            self.sampler.report(3, "Couldn't parse Y acceleration in '%s' (length=%d)" % (fields[2], len(fields[2])))
+            return None
+        try:
+            az = float(fields[3])
+        except:
+            self.sampler.report(3, "Couldn't parse Z acceleration in '%s' (length=%d)" % (fields[3], len(fields[3])))
+            return None
+        try:
+            alt = float(fields[4])
+        except:
+            self.sampler.report(3, "Couldn't parse altitude in '%s' (length=%d)" % (fields[4], len(fields[4])))
+            return None
+        if self.baseAltitude is None:
+            self.baseAltitude = alt
+        ncount = self.sampler.receptionCount
+        self.sampleHistory.append((secs, ncount))
+        if len(self.sampleHistory) > self.sampleKeep:
+            self.sampleHistory = self.sampleHistory[-self.sampleKeep:]
+        osecs, ocount = self.sampleHistory[0]
+        freq = 0.0 if ocount == ncount else float(ncount-ocount)/(secs-osecs)
+        alt = alt-self.baseAltitude
+        ax /= gravity
+        ay /= gravity
+        az /= gravity
+        rate = self.sampler.receptionRate * 100
+        rec = SampleRecord(time = secs, sid = sid, alt = alt, ax = ax, ay = ay, az = az, freq = freq, rate = rate, rssi = rssi)
+        if not rec.accept():
+            return None
+        self.minAltitude, self.maxAltitude = minMax(alt, self.minAltitude, self.maxAltitude)
+        self.minAcceleration, self.maxAcceleration = minMax(rec.acceleration(), self.minAcceleration, self.maxAcceleration)
+        return rec
 
     
 def run(name, args):
@@ -442,8 +555,9 @@ def run(name, args):
     slow = False
     basic = False
     logName = None
+    bufSize = 3
 
-    optList, args = getopt.getopt(args, "hBSLv:p:b:t:s:")
+    optList, args = getopt.getopt(args, "hBSLv:p:b:t:s:k:")
     for (opt, val) in optList:
         if opt == '-h':
             usage(name)
@@ -464,6 +578,8 @@ def run(name, args):
             senderId = val
         elif opt == '-B':
             basic = True
+        elif opt == '-k':
+            bufSize = int(val)
         elif opt == '-S':
             slow = True
         elif opt == '-L':
@@ -484,7 +600,8 @@ def run(name, args):
             return
 
 
-    sampler = Sampler(port, baud, senderId, verbosity, retries)
+    sampler = Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else BufferedSampler(port, baud, senderId, verbosity, retries, bufSize)
+    formatter = Formatter(sampler)
     lastTime = -1.0
     first = True
     while True:
@@ -492,9 +609,7 @@ def run(name, args):
         if tup is None:
             print("Exiting")
             return
-        r = formatSample(tup, sampler)
-        if not r.accept():
-            continue
+        r = formatter.formatSample(tup)
         if r is None:
             continue
         t = r.timeStamp
