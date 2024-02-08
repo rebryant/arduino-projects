@@ -113,6 +113,9 @@ class Sampler:
         if self.verbosity >= level:
             print(msg)
 
+    def terminate(self):
+        print("Can't terminate unbufferred sampler")
+
     def newConnection(self):
         # New connection
         self.lastSampleId = -1
@@ -352,10 +355,12 @@ class DropBuffer:
         return (self.insertCount, self.retrieveCount)
 
     def terminate(self):
+        print("Terminating buffer ...")
         self.mutex.acquire()
         self.stop = True
         self.mutex.release()
         self.thread.join()
+        print("Termination complete")
 
 
 class BufferedSampler(Sampler):
@@ -371,6 +376,9 @@ class BufferedSampler(Sampler):
 
     def statistics(self):
         return self.buffer.statistics()
+
+    def terminate(self):
+        self.buffer.terminate()
 
 class SampleRecord:
     timeStamp = 0.0

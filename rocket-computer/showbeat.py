@@ -24,7 +24,24 @@ def usage(prog):
 devPrefix = "/dev/cu.usbmodem"
 
 class ShowMode:
-    acceleration, altitude, both = range(3)
+    acceleration, altitude = range(2)
+    symbols = ['x', 'a']
+    names = ["Acceleration", "Altitude"]
+
+    def parse(self, symbol):
+        for mode in range(2):
+            if self.symbols[mode] == symbol:
+                return mode
+        return None
+
+    def change(self, mode):
+        if mode == self.acceleration:
+            return self.altitude
+        elif mode == self.altitude:
+            return self.acceleration
+        else:
+            return None
+
 
 class Beater:
     sampler = None
@@ -37,8 +54,11 @@ class Beater:
     mode = None
 
     # Configuration parameters (default = HDMI 1080p)
-    width = 1920
-    height = 1080
+    screenWidth = 1920
+    screenHeight = 1080
+    controlHeight = 80
+    width = None
+    height = None
     # Rectangle sizes are normalized to [0,1] in both dimensions
     center = (0.5, 0.5)
     minSize = 0.05
@@ -49,7 +69,7 @@ class Beater:
     altKwd = 'altitude'
     altMin = -0.5
     altMax = 0.5
-    rectangleCount = 5
+    rectangleCount = 50
 
 
     def __init__(self, sampler, formatter, mode, count):
@@ -57,10 +77,22 @@ class Beater:
         self.formatter = formatter
         self.mode = mode
         self.rectangleCount = count
+        self.width = self.screenWidth
+        self.height = self.screenHeight - self.controlHeight
         self.tk = Tk()
-        self.frame = Frame(self.tk)
-        self.frame.pack(fill=BOTH, expand=YES)
-        self.canvas = Canvas(self.frame, width=self.width, height=self.height, background="#ffffff")
+        self.controlFrame = Frame(self.tk)
+        self.controlFrame.pack(side=TOP, fill=BOTH, expand=YES)
+        self.quitButton = Button(self.controlFrame, text = "Quit", height=2, width = 5, command = self.quit)
+        self.quitButton.pack(side=LEFT)
+        self.accelButton = Button(self.controlFrame, text = "Accel", height=2, width = 5, command = self.doAcceleration)
+        self.accelButton.pack(side=LEFT)
+        self.altButton = Button(self.controlFrame, text = "Alt", height=2, width = 5, command = self.doAltitude)
+        self.altButton.pack(side=LEFT)
+
+        
+        self.dataFrame = Frame(self.tk)
+        self.dataFrame.pack(side=BOTTOM, fill=BOTH, expand=YES)
+        self.canvas = Canvas(self.dataFrame, width=self.width, height=self.height, background="#ffffff")
         self.canvas.pack(fill=BOTH, expand=YES)
         self.addRectangles()
         self.averageAltitude = self.findAltitude()
@@ -78,7 +110,6 @@ class Beater:
         print("WARNING: Could not determine altitude")
         return 0
         
-
     # Index of rectangle in object list
     # Rectangles numbered from 0 to self.rectangleCount-1
     # Put smallest ones at end of list
@@ -96,33 +127,35 @@ class Beater:
 
     def addRectangles(self):
         self.objects = [0] * self.rectangleCount
-        self.objectColors = ["#ff0000"] * self.rectangleCount
+        self.objectColors = ["#ffffff"] * self.rectangleCount
         for i in range(len(self.objects)):
             lx, ly, rx, ry = self.rectangleCoordinates(i)
-            color = hsv.valueToColor(i, xmax= len(self.objects)-1)
-            self.objectColors[i] = color
-            self.objects[i] = self.canvas.create_rectangle((lx, ly), (rx, ry), fill=color, outline="")
-#            print("Adding object %d rectangle (%.2f, %.2f, %.2f, %.2f).  Color = %s" % (self.objects[i], lx, ly, rx, ry, color))
+            self.objects[i] = self.canvas.create_rectangle((lx, ly), (rx, ry), fill=self.objectColors[i], outline="")
         self.tk.update()
 
+    def clearColors(self):
+        nobj = len(self.objects)
+        for i in range(nobj):
+            self.objectColors[i] = "#ffffff"
+            self.canvas.itemconfigure(self.objects[i], fill = self.objectColors[i])
+        self.tk.update()
+        
+
     def updateRectangles(self, color):
-#        print("Updating color = %s" % color)
         nobj = len(self.objects)
         for i in range(nobj-1):
             self.objectColors[i] = self.objectColors[i+1]
         self.objectColors[nobj-1] = color
         for i in range(nobj):
-#            print("Setting color of item %d to %s" % (self.objects[i], self.objectColors[i]))
             self.canvas.itemconfigure(self.objects[i], fill = self.objectColors[i])
-#        print("Rectangles updated")
         
     def update(self):
         tup = self.sampler.getNextSampleTuple()
         if tup is None:
-            return
+            return True
         r = self.formatter.formatSample(tup)
         if r is None:
-            return
+            return True
         if self.mode == ShowMode.acceleration:
             value = r.accelerationX
             vmin = self.accelMin
@@ -132,19 +165,39 @@ class Beater:
             vmin = self.altMin
             vmax = self.altMax
         color = hsv.valueToColor(value, vmin, vmax)
-        self.updateRectangles(color)
-        self.canvas.update()
-#        if self.mode != ShowMode.acceleration:
-#            print("Altitude = %.2f, Average altitude = %.2f" % (value, self.averageAltitude))
-#        if self.mode != ShowMode.acceleration:
-#            self.averageAltitude = 0.1 * value + 0.9 * self.averageAltitude
+        try:
+            self.updateRectangles(color)
+            self.canvas.update()
+            return True
+        except TclError:
+            print("Encountered error when exiting")
+            return False
 
     def run(self, maxCount = None):
         count = 0
-        while maxCount is None or count < maxCount:
-            self.update()
+        done = False
+        while not done and (maxCount is None or count < maxCount):
             count += 1
+            done = not self.update()
         
+    def quit(self):
+        self.sampler.terminate()
+        self.tk.destroy()
+        sys.exit(0)
+
+    def doAcceleration(self):
+        sm = ShowMode()
+        self.mode = sm.acceleration
+        print("Switching to mode %s" % sm.names[self.mode])
+        self.clearColors()
+
+    def doAltitude(self):
+        sm = ShowMode()
+        self.mode = sm.altitude
+        self.averageAltitude = self.findAltitude()
+        print("Switching to mode %s" % sm.names[self.mode])
+        self.clearColors()
+
 def run(name, args):
     port = None
     baud = 115200
@@ -152,7 +205,7 @@ def run(name, args):
     verbosity = 1
     senderId = None
     mode = ShowMode.acceleration
-    count = 20
+    count = 50
     bufSize = 1
     
 
@@ -180,10 +233,11 @@ def run(name, args):
         elif opt == '-k':
             bufSize = int(val)
         elif opt == '-m':
-            if len(val) != 1 or val not in "ax":
+            sm = ShowMode()
+            mode = sm.parse(val)
+            if mode is None:
                 print("Mode must be 'a' or 'x'")
                 return
-            mode = ShowMode.altitude if val == 'a' else ShowMode.acceleration
 
     if port is None:
         plist = recorder.findPorts()
