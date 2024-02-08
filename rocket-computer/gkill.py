@@ -14,7 +14,7 @@ def findProcesses(phrase):
     p = subprocess.run(["ps", "-a"], stdout = subprocess.PIPE)
     lines = str(p.stdout).split("\\n")
     for line in lines:
-        if line.find("Python3") >= 0 and line.find(phrase) >= 0:
+        if line.find("Python") >= 0 and line.find(phrase) >= 0:
             try:
                 pid = int(line.split()[0])
                 result.append(pid)
