@@ -54,8 +54,8 @@ class Beater:
     mode = None
 
     # Configuration parameters (default = HDMI 1080p)
-    screenWidth = 1920
-    screenHeight = 1080
+    screenWidth = 1800
+    screenHeight =1000
     controlHeight = 80
     width = None
     height = None
@@ -255,7 +255,7 @@ def run(name, args):
     sampler = recorder.Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else recorder.BufferedSampler(port, baud, senderId, verbosity, retries, bufSize) 
     formatter = recorder.Formatter(sampler)
     beater = Beater(sampler, formatter, mode, count)
-    beater.run(1000)
+    beater.run()
 
     
 if __name__ == "__main__":
