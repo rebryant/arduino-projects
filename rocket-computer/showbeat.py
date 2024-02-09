@@ -52,6 +52,7 @@ class Beater:
     objectColors = []
     averageAltitude = 0.0
     mode = None
+    terminating = False
 
     # Configuration parameters (default = HDMI 1080p)
     screenWidth = 1800
@@ -88,14 +89,14 @@ class Beater:
         self.accelButton.pack(side=LEFT)
         self.altButton = Button(self.controlFrame, text = "Alt", height=2, width = 5, command = self.doAltitude)
         self.altButton.pack(side=LEFT)
-
-        
+      
         self.dataFrame = Frame(self.tk)
         self.dataFrame.pack(side=BOTTOM, fill=BOTH, expand=YES)
         self.canvas = Canvas(self.dataFrame, width=self.width, height=self.height, background="#ffffff")
         self.canvas.pack(fill=BOTH, expand=YES)
         self.addRectangles()
         self.averageAltitude = self.findAltitude()
+        self.terminating = False
 
         
     def findAltitude(self):
@@ -142,14 +143,20 @@ class Beater:
         
 
     def updateRectangles(self, color):
+        if self.terminating:
+            return
         nobj = len(self.objects)
         for i in range(nobj-1):
             self.objectColors[i] = self.objectColors[i+1]
         self.objectColors[nobj-1] = color
         for i in range(nobj):
+            if self.terminating:
+                return
             self.canvas.itemconfigure(self.objects[i], fill = self.objectColors[i])
         
     def update(self):
+        if self.terminating:
+            return False
         tup = self.sampler.getNextSampleTuple()
         if tup is None:
             return True
@@ -165,13 +172,9 @@ class Beater:
             vmin = self.altMin
             vmax = self.altMax
         color = hsv.valueToColor(value, vmin, vmax)
-        try:
-            self.updateRectangles(color)
-            self.canvas.update()
-            return True
-        except TclError:
-            print("Encountered error when exiting")
-            return False
+        self.updateRectangles(color)
+        self.canvas.update()
+        return True
 
     def run(self, maxCount = None):
         count = 0
@@ -181,9 +184,11 @@ class Beater:
             done = not self.update()
         
     def quit(self):
+        self.terminating = True
         self.sampler.terminate()
-        self.tk.destroy()
+        self.tk.after(200)
         sys.exit(0)
+
 
     def doAcceleration(self):
         sm = ShowMode()
