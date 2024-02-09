@@ -161,7 +161,7 @@ class Beater:
             vmin = self.accelMin
             vmax = self.accelMax
         else:
-            value = r.altitude
+            value = r.altitude - self.averageAltitude
             vmin = self.altMin
             vmax = self.altMax
         color = hsv.valueToColor(value, vmin, vmax)
@@ -195,7 +195,7 @@ class Beater:
         sm = ShowMode()
         self.mode = sm.altitude
         self.averageAltitude = self.findAltitude()
-        print("Switching to mode %s" % sm.names[self.mode])
+        print("Switching to mode %s.  Altitude = %.2f" % (sm.names[self.mode], self.averageAltitude))
         self.clearColors()
 
 def run(name, args):
