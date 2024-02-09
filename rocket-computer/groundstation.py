@@ -41,11 +41,11 @@ class TextTracker:
         outline = self.canvas.create_rectangle((0,0), (width, 4.0*self.labelHeight), fill="white", outline = "")
         self.title = self.canvas.create_text((width/2, 0.5*self.labelHeight), text=title)
         self.minLabel = self.canvas.create_text((self.pad,1.5*self.labelHeight), text="MIN:", anchor="w", fill="blue")
-        self.minField = self.canvas.create_text((offset, 1.5*self.labelHeight), text="---", anchor="e")
+        self.minField = self.canvas.create_text((offset, 1.5*self.labelHeight), text="---", anchor="e", fill="black")
         self.curLabel = self.canvas.create_text((self.pad,2.5*self.labelHeight), text="CUR:", anchor="w", fill="red")
-        self.curField = self.canvas.create_text((offset, 2.5*self.labelHeight), text="---", anchor="e")
+        self.curField = self.canvas.create_text((offset, 2.5*self.labelHeight), text="---", anchor="e", fill="black")
         self.maxLabel = self.canvas.create_text((self.pad,3.5*self.labelHeight), text="MAX:", anchor="w", fill="blue")
-        self.maxField = self.canvas.create_text((offset, 3.5*self.labelHeight), text="---", anchor="e")
+        self.maxField = self.canvas.create_text((offset, 3.5*self.labelHeight), text="---", anchor="e", fill="black")
 
     def reset(self):
         self.minValue = None
@@ -108,7 +108,7 @@ class Grapher:
         self.yMax = yMax
         self.canvas = Canvas(self.parent, width = width, height = height, background = "white")
         self.canvas.pack(side=LEFT)
-        self.title = self.canvas.create_text((width/2, self.titleY), text=title)
+        self.title = self.canvas.create_text((width/2, self.titleY), text=title, fill="black")
         self.dataPoints = []
         self.axisParts = []
         self.canvas.update()
@@ -138,10 +138,10 @@ class Grapher:
         ytop = self.getYpos(self.yMax)
         xaxis = self.canvas.create_line((xleft, ybottom), (xright, ybottom), fill="black")
         dtext = "%.1f" % self.duration
-        xlabel = self.canvas.create_text((xright, ybottom+self.margin/2), anchor = "e", text= dtext)
+        xlabel = self.canvas.create_text((xright, ybottom+self.margin/2), anchor = "e", text= dtext, fill="black")
         yaxis = self.canvas.create_line((xleft, ybottom), (xleft, ytop), fill="black")
         ytext = "%.1f" % self.yMax
-        ylabel = self.canvas.create_text((xleft-self.margin/2, 0), anchor = "n", text= ytext)
+        ylabel = self.canvas.create_text((xleft-self.margin/2, 0), anchor = "n", text= ytext, fill="black")
         self.axisParts = [xaxis, xlabel, yaxis, ylabel]
 
 
