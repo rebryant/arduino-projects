@@ -114,7 +114,7 @@ class Sampler:
             print(msg)
 
     def terminate(self):
-        print("Can't terminate unbufferred sampler")
+        pass
 
     def newConnection(self):
         # New connection
@@ -151,20 +151,11 @@ class Sampler:
                 failures += 1
                 time.sleep(1)
                 continue
-            self.report(1, "Connected to serial port %s at baud rate %d" % (self.port, self.baud)) 
+            self.report(2, "Connected to serial port %s at baud rate %d" % (self.port, self.baud)) 
             self.newConnection()
             return
         self.done = True
     
-    def checkDone(self):
-        avail =  select.select([sys.stdin], [], [], 0)
-        if sys.stdin in avail[0]:
-            char = sys.stdin.read(1)
-            print("Read '%s' from stdin" % char)
-            if len(char) > 0 and char[0] == 'q':
-                self.done = True
-        
-
     # Use decaying value
     def updateRate(self, received):
         if received:
@@ -196,7 +187,6 @@ class Sampler:
         return None
 
     def getNextSampleTuple(self):
-#        self.checkDone()
         while len(self.sampleBuffer) == 0 and not self.done:
             line = self.getLine()
             if line is not None:
@@ -355,12 +345,10 @@ class DropBuffer:
         return (self.insertCount, self.retrieveCount)
 
     def terminate(self):
-        print("Terminating buffer ...")
         self.mutex.acquire()
         self.stop = True
         self.mutex.release()
         self.thread.join()
-        print("Termination complete")
 
 
 class BufferedSampler(Sampler):
@@ -488,6 +476,9 @@ def minMax(x, xmin, xmax):
 class Formatter:
 
     sampler = None
+    logName = None
+    first = True
+
     # How many sample tuples should be kept
     sampleKeep = 100
     # Timings of last sampleKeep receptions.  Each entry is a tuple (secs, receivedCount)
@@ -499,8 +490,10 @@ class Formatter:
     minAcceleration = None
     maxAcceleration = None
 
-    def __init__(self, sampler):
+    def __init__(self, sampler, logName = None):
         self.sampler = sampler
+        self.logName = logName
+        self.first = True
         
     def formatSample(self, sampleTuple):
         (secs, sample, rssi) = sampleTuple
@@ -551,6 +544,11 @@ class Formatter:
             return None
         self.minAltitude, self.maxAltitude = minMax(alt, self.minAltitude, self.maxAltitude)
         self.minAcceleration, self.maxAcceleration = minMax(rec.acceleration(), self.minAcceleration, self.maxAcceleration)
+        if self.logName is not None:
+            if self.first:
+                rec.csvHeader(self.logName)
+                self.first = False
+            rec.csvLine(self.logName)
         return rec
 
     
@@ -609,13 +607,12 @@ def run(name, args):
 
 
     sampler = Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else BufferedSampler(port, baud, senderId, verbosity, retries, bufSize)
-    formatter = Formatter(sampler)
+    formatter = Formatter(sampler, logName)
     lastTime = -1.0
     first = True
     while True:
         tup = sampler.getNextSampleTuple()
         if tup is None:
-            print("Exiting")
             return
         r = formatter.formatSample(tup)
         if r is None:
@@ -624,11 +621,6 @@ def run(name, args):
         if not slow or t > lastTime + 1.0:
             lastTime = math.floor(t)
             r.show(sys.stdout, basic = basic)
-        if logName is not None:
-            if first:
-                r.csvHeader(logName, basic)
-                first = False
-            r.csvLine(logName, basic)
     
 if __name__ == "__main__":
     run(sys.argv[0], sys.argv[1:])
