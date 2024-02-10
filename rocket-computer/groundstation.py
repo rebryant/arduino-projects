@@ -39,7 +39,7 @@ class TextTracker:
         self.canvas = Canvas(self.parent, width=width, height=4.0*self.labelHeight)
         self.canvas.pack(side=TOP)
         outline = self.canvas.create_rectangle((0,0), (width, 4.0*self.labelHeight), fill="white", outline = "")
-        self.title = self.canvas.create_text((width/2, 0.5*self.labelHeight), text=title)
+        self.title = self.canvas.create_text((width/2, 0.5*self.labelHeight), text=title, fill="black")
         self.minLabel = self.canvas.create_text((self.pad,1.5*self.labelHeight), text="MIN:", anchor="w", fill="blue")
         self.minField = self.canvas.create_text((offset, 1.5*self.labelHeight), text="---", anchor="e", fill="black")
         self.curLabel = self.canvas.create_text((self.pad,2.5*self.labelHeight), text="CUR:", anchor="w", fill="red")
@@ -176,8 +176,8 @@ class Station:
     minTime = None
 
     # Configuration parameters (default = HDMI 1080p)
-    screenWidth = 1800
-    screenHeight =1000
+    screenWidth = 1750
+    screenHeight =950
     controlHeight = 80
     width = None
     height = None
