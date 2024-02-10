@@ -97,7 +97,7 @@ class Grapher:
 
 # Configuration parameters
     duration = 60.0
-    radius = 2
+    radius = 3
     margin = 50
     titleY = 15
 
