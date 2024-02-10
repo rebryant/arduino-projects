@@ -9,7 +9,7 @@ import getopt
 import recorder
 
 def usage(prog):
-    print("Usage: %s [-h] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SID] [-k BSIZE]" % prog)
+    print("Usage: %s [-h] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SID] [-k BSIZE] [-y YMAX]" % prog)
     print("  -h      Print this message")
     print("  -L      Enable logging")
     print("  -v VERB Set verbosity")
@@ -182,7 +182,7 @@ class Station:
     width = None
     height = None
 
-    def __init__(self, sampler, formatter):
+    def __init__(self, sampler, formatter, yMax):
         self.sampler = sampler
         self.formatter = formatter
         self.tk = Tk()
@@ -199,7 +199,7 @@ class Station:
         self.canvas.pack(side=LEFT, expand=YES)
         self.dataFrame = Frame(self.canvas)
         self.dataFrame.pack(side=TOP, fill=BOTH, expand=YES)
-        self.altitudeGrapher = Grapher(self.dataFrame, "Altitude", 0.7*self.width, self.height, 0.0, 100.0)
+        self.altitudeGrapher = Grapher(self.dataFrame, "Altitude", 0.7*self.width, self.height, 0.0, yMax)
         self.trackerFrame = Frame(self.canvas)
         self.trackerFrame.pack(side=LEFT)
         self.timeTracker = TextTracker(self.trackerFrame, "Time")
@@ -254,8 +254,9 @@ def run(name, args):
     senderId = None
     logName = None
     bufSize = 12
+    yMax = 100.0
 
-    optList, args = getopt.getopt(args, "hLv:p:b:t:s:k:")
+    optList, args = getopt.getopt(args, "hLv:p:b:t:s:k:y:")
     for (opt, val) in optList:
         if opt == '-h':
             recorder.usage(name)
@@ -276,6 +277,8 @@ def run(name, args):
             senderId = val
         elif opt == '-k':
             bufSize = int(val)
+        elif opt == '-y':
+            yMax = float(val)
         elif opt == '-L':
             logName = recorder.logFileName()
             print("Writing to log file %s" % logName)
@@ -283,7 +286,7 @@ def run(name, args):
     if port is None:
         plist = recorder.findPorts()
         if len(plist) == 0:
-            print("Can't find any devices starting with names '%s'" % devPrefix)
+            print("Can't find any devices starting with names '%s'" % recorder.devPrefix)
             return
         elif len(plist) == 1:
             port = plist[0]
@@ -295,7 +298,7 @@ def run(name, args):
 
     sampler = recorder.Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else recorder.BufferedSampler(port, baud, senderId, verbosity, retries, bufSize)
     formatter = recorder.Formatter(sampler, logName)
-    station = Station(sampler, formatter)
+    station = Station(sampler, formatter, yMax)
     station.run()
 
     
