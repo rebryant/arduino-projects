@@ -11,7 +11,7 @@ import recorder
 def usage(prog):
     print("Usage: %s [-h] [-L] [-v VERB] [-p PORT] [-b BAUD] [-t TRIES] [-s SID] [-k BSIZE] [-y YMAX]" % prog)
     print("  -h      Print this message")
-    print("  -L      Enable logging")
+    print("  -L      Disable logging")
     print("  -v VERB Set verbosity")
     print("  -p PORT Specify serial port on /dev")
     print("  -b BAUD Set serial interface baud rate")
@@ -252,14 +252,14 @@ def run(name, args):
     retries = 10
     verbosity = 1
     senderId = None
-    logName = None
+    logName = recorder.logFileName()
     bufSize = 12
     yMax = 100.0
 
     optList, args = getopt.getopt(args, "hLv:p:b:t:s:k:y:")
     for (opt, val) in optList:
         if opt == '-h':
-            recorder.usage(name)
+            usage(name)
             return
         elif opt == '-v':
             verbosity = int(val)
@@ -280,8 +280,7 @@ def run(name, args):
         elif opt == '-y':
             yMax = float(val)
         elif opt == '-L':
-            logName = recorder.logFileName()
-            print("Writing to log file %s" % logName)
+            logName = None
 
     if port is None:
         plist = recorder.findPorts()
@@ -295,6 +294,9 @@ def run(name, args):
             for p in plist:
                 print("  %s" % p)
             return
+
+    if logName is not None:
+        print("Writing to log file %s" % logName)
 
     sampler = recorder.Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else recorder.BufferedSampler(port, baud, senderId, verbosity, retries, bufSize)
     formatter = recorder.Formatter(sampler, logName)

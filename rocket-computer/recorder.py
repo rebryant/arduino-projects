@@ -22,7 +22,7 @@ def usage(name):
     print(" -h       Print this message")
     print(" -B       Show only basic data")
     print(" -S       Slow to ~ 1 sample per second")
-    print(" -L       Save samples to CSV log file")
+    print(" -L       Disable generation of log file")
     print(" -v VERB  Verbosity level")
     print(" -k BSIZE Buffer with up to BSIZE samples")
 
@@ -560,7 +560,7 @@ def run(name, args):
     senderId = None
     slow = False
     basic = False
-    logName = None
+    logName = logFileName()
     bufSize = 3
 
     optList, args = getopt.getopt(args, "hBSLv:p:b:t:s:k:")
@@ -589,8 +589,7 @@ def run(name, args):
         elif opt == '-S':
             slow = True
         elif opt == '-L':
-            logName = logFileName()
-            print("Writing to log file %s" % logName)
+            logName = None
 
     if port is None:
         plist = findPorts()
@@ -605,6 +604,8 @@ def run(name, args):
                 print("  %s" % p)
             return
 
+    if logName is not None:
+        print("Writing to log file %s" % logName)
 
     sampler = Sampler(port, baud, senderId, verbosity, retries) if bufSize == 0 else BufferedSampler(port, baud, senderId, verbosity, retries, bufSize)
     formatter = Formatter(sampler, logName)
