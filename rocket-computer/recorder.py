@@ -262,15 +262,17 @@ class Sampler:
         sidList = sorted([sid for sid in sidList if sid > self.lastSampleId and sid not in self.sampleBuffer])
         # Determine interpolating values for times
         t = self.timeStamp()
-        if (t-self.lastSampleTime) > maxGap:
-            self.lastSampleTime = t - maxGap
-        dt = t-self.lastSampleTime
-        incrT = dt/(len(sidList)+1)
+        minlst = t - len(sidList) * maxGap
+        self.lastSampleTime = max(minlst, self.lastSampleTime)
+        if len(sidList) == 0:
+            return
+        incrT = (t-self.lastSampleTime)/len(sidList)
         sidTimes = {}
-        self.lastSampleTime += incrT
         for sid in sidList:
-            sidTimes[sid] = self.lastSampleTime
             self.lastSampleTime += incrT
+            sidTimes[sid] = self.lastSampleTime
+        # Eliminate accumulated error
+        self.lastSampleTime = t
         offset = 3
         while offset < len(fields):
             try:
@@ -561,7 +563,7 @@ def run(name, args):
     slow = False
     basic = False
     logName = logFileName()
-    bufSize = 3
+    bufSize = 12
 
     optList, args = getopt.getopt(args, "hBSLv:p:b:t:s:k:")
     for (opt, val) in optList:
