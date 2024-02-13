@@ -11,8 +11,8 @@ class Evaluator:
 #    Array of dictionaries built from CSV reader.  One entry per sample
 #    All entries are text
     entries = []
-    events = ["launch", "thrust-end", "apogee", "landing"]
-    headings = ["row", "time", "altitude", "acceleration", "acceleration-X"]
+    events = ["launch", "thrust", "apogee", "deploy", "land"]
+    headings = ["row", "time", "alt", "accel", "accel-X"]
     formats = ["%d", "%.3f", "%.3f", "%.3f", "%.3f"]
 
     def __init__(self, cfile):
@@ -86,7 +86,17 @@ class Evaluator:
                 return r
         return -1
 
-    def findLanding(self):
+    def findDeploy(self):
+        accelerations = self.getAccelerations()
+        rstart = self.findApogee()
+        if rstart < 0:
+            return rstart
+        for r in range(rstart, self.count()):
+            if accelerations[r] > 1.0:
+                return r
+        return -1
+
+    def findLand(self):
         altitudes = self.getAltitudes()
         rstart = self.findApogee()
         if rstart < 0:
@@ -105,8 +115,9 @@ class Evaluator:
         rlaunch = self.findLaunch()
         rtend = self.findThrustEnd()
         rapogee = self.findApogee()
-        rlanding = self.findLanding()
-        rows = [rlaunch, rtend, rapogee, rlanding]
+        rdeploy = self.findDeploy()
+        rland = self.findLand()
+        rows = [rlaunch, rtend, rapogee, rdeploy, rland]
         result = {}
         for idx in range(len(rows)):
             event = self.events[idx]
@@ -139,6 +150,11 @@ class Evaluator:
         coeffs = np.polynomial.polynomial.polyfit(t, a, 4)
         return list(coeffs)
         
+    def deriv(self, coeffs):
+        wcoeffs = [i * coeffs[i] for i in range(len(coeffs))]
+        return wcoeffs[1:]
+        
+
     def ceval(self, coeffs, t):
         pwr = 1.0
         val = 0.0
@@ -152,34 +168,37 @@ class Evaluator:
 def fit(e):
     h = e.highlights()
     elaunch = h['launch']
-    etend = h['thrust-end']
+    etend = h['thrust']
     eapogee = h['apogee']
-    elanding = h['landing']
+    eland = h['land']
     rlaunch = elaunch['row']
     rtend = etend['row']
     rapogee = eapogee['row']
-    rlanding = elanding['row']
-    print("Launch:        r=%d, t=%.3f" % (elaunch['row'], elaunch['time']))
+    rland = eland['row']
+    print("Launch:    r=%d, t=%.3f" % (elaunch['row'], elaunch['time']))
     print("Apogee:    r=%d, t=%.3f" % (eapogee['row'], eapogee['time']))    
     coeffs = e.altitudeCurve(rlaunch, rapogee)
-    print("Row\tTime\tAlt\tCalt")
+    vcoeffs = e.deriv(coeffs)
+    print("Row\tTime\tRTime\tAlt\tCalt\tVelo")
     for r in range(rlaunch, rapogee+1):
         t = e.getFloatField(r, 'time')
+        rt = t-e.tstart
         alt = e.getFloatField(r, 'altitude')
         calt = e.ceval(coeffs, t)
-        print("%d\t%.3f\t%.3f\t%.3f" % (r, t, alt, calt))
+        velo = e.ceval(vcoeffs, t)
+        print("%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f" % (r, t, rt, alt, calt, velo))
 
     print("Apogee:        r=%d, t=%.3f" % (eapogee['row'], eapogee['time']))
-    print("Landing:    r=%d, t=%.3f" % (elanding['row'], elanding['time']))    
-    coeffs = e.altitudeCurve(rapogee, rlanding)
-    print("Row\tTime\tAlt\tCalt")
-    for r in range(rapogee, rlanding+1):
+    print("Land:    r=%d, t=%.3f" % (eland['row'], eland['time']))    
+    coeffs = e.altitudeCurve(rapogee, rland)
+    vcoeffs = e.deriv(coeffs)
+    print("Row\tTime\tAlt\tCalt\tVelo")
+    for r in range(rapogee, rland+1):
         t = e.getFloatField(r, 'time')
         alt = e.getFloatField(r, 'altitude')
         calt = e.ceval(coeffs, t)
-        print("%d\t%.3f\t%.3f\t%.3f" % (r, t, alt, calt))
-
-
+        velo = e.ceval(vcoeffs, t)
+        print("%d\t%.3f\t%.3f\t%.3f\t%.3f" % (r, t, alt, calt, velo))
 
 
 def process(file):
