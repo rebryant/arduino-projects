@@ -194,8 +194,8 @@ class Evaluator:
         outfile.write("\\begin{tabular}{lrrrr}\n")
         outfile.write("\\multicolumn{5}{l}{\\textbf{%s}} \\\\ \n" % self.root)
         outfile.write("\\toprule\n")
-        outfile.write("Event & Time & Altitude & Acceleration & Velocity\\\\ \n")
-        outfile.write(" &      ($s$) & ($m$) & ($g$) & $(m/s)$ \\\\ \n")
+        outfile.write("Event & \\makebox[15mm]{Time} & \\makebox[15mm]{Altitude} & \\makebox[15mm]{Acceleration} & \\makebox[15mm]{Velocity}\\\\ \n")
+        outfile.write(" &      \\makebox[15mm]{(seconds)} & \\makebox[15mm]{(meters)} & \\makebox[15mm]{(g)} & \\makebox[15mm]{(m/s)} \\\\ \n")
         outfile.write("\\midrule\n")
 
         # Launch

@@ -91,7 +91,7 @@ def startGraph(outfile):
     skipline(1, outfile)
     outfile.write("\\begin{center}\n")
     outfile.write("\\begin{tikzpicture}\n")
-    outfile.write("\\begin{axis}[mark options ={scale=0.55}, height=16cm,width=16cm,grid=both, grid style={black!10},\n")
+    outfile.write("\\begin{axis}[mark options ={scale=0.75}, height=16cm,width=16cm,grid=both, grid style={black!10},\n")
     outfile.write("              legend cell align={left}, xlabel={Time (seconds)}, ymin = 0, ylabel={Altitude (meters)}]\n")
 
 def finishGraph(outfile):
