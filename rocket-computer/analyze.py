@@ -6,16 +6,28 @@ import csv
 import sys
 import numpy as np
 
-
 class Evaluator:
 #    Array of dictionaries built from CSV reader.  One entry per sample
 #    All entries are text
+    root = None
     entries = []
-    events = ["launch", "thrust", "apogee", "deploy", "land"]
+    events = ["launch", "thr-max", "thr-end", "v-max", "apogee", "deploy", "land"]
+    vevent = "v-max"
     headings = ["row", "time", "alt", "accel", "accel-X"]
+    vheadings = ["row", "time", "alt", "accel", "accel-X", "velocity"]
+    vheading = "velocity"
     formats = ["%d", "%.3f", "%.3f", "%.3f", "%.3f"]
+    vformat = "%.3f"
 
-    def __init__(self, cfile):
+    def __init__(self, root):
+        self.root = root
+        csvName = root + ".csv"
+        try:
+            cfile = open(csvName, "r")
+        except:
+            self.root = None
+            print("Couldn't open file '%s'" % csvName)
+            return
         self.entries = []
         creader = csv.DictReader(cfile)
         for row in creader:
@@ -55,13 +67,22 @@ class Evaluator:
 
     def getNormAltitudes(self, rstart, rend):
         altitudes = self.getAltitudes()
-        return [altitudes[r]-self.astart for r in range(rstart, rend+1)]
+        return [max(0, altitudes[r]-self.astart) for r in range(rstart, rend+1)]
 
 
     def findLaunch(self):
         accelerations = self.getAccelerations()
         for r in range(self.count()):
             if accelerations[r] > 1.5:
+                return r
+        return -1
+
+    def findThrustMax(self):
+        rend = self.findApogee()
+        accelerations = self.getAccelerations()
+        tmax = max(accelerations[0:rend+1])
+        for r in range(rend+1):
+            if accelerations[r] == tmax:
                 return r
         return -1
 
@@ -77,7 +98,6 @@ class Evaluator:
                 return r
         return -1
         
-
     def findApogee(self):
         altitudes = self.getAltitudes()
         bestHeight = max(altitudes)
@@ -106,6 +126,21 @@ class Evaluator:
                 return r
         return -1
 
+    def plotData(self, outfile):
+        rend = self.findLand()
+        times = self.getNormTimes(self.rstart, rend)
+        altitudes = self.getNormAltitudes(self.rstart, rend)
+        outfile.write("coordinates {");
+        count = 0
+        for (t, a) in zip(times, altitudes):
+            outfile.write(" (%.2f, %.2f)" % (t, a))
+            count += 1
+            if count >= 10:
+                outfile.write("\n      ")
+                count = 0
+        outfile.write("}\n")
+
+
     # Generate dictionary of dictionaries show interesting events
     def highlights(self):
         times = self.getTimes()
@@ -113,11 +148,14 @@ class Evaluator:
         accelerations = self.getAccelerations()
         accelerationXs = self.getAccelerationXs()
         rlaunch = self.findLaunch()
+        rtmax = self.findThrustMax()
         rtend = self.findThrustEnd()
+
+        rvmax, vmax = self.findMaxVelocity()
         rapogee = self.findApogee()
         rdeploy = self.findDeploy()
         rland = self.findLand()
-        rows = [rlaunch, rtend, rapogee, rdeploy, rland]
+        rows = [rlaunch, rtmax, rtend, rvmax, rapogee, rdeploy, rland]
         result = {}
         for idx in range(len(rows)):
             event = self.events[idx]
@@ -129,19 +167,84 @@ class Evaluator:
                 vals = [times[r], altitudes[r], accelerations[r], accelerationXs[r]]
             for i in range(4):
                 entry[self.headings[i+1]] = vals[i]
+            if event == self.vevent:
+                entry[self.vheading] = vmax
             result[event] = entry
         return result
 
+    def getCoordinate(self, event, h):
+        t = h[event]['time'] - self.tstart
+        a = h[event]['alt'] - self.astart
+        return (t, a)
+
     def estring(self, event, h):
         entry = h[event]
-        return [event] + [(self.formats[i] % entry[self.headings[i]]) for i in range(len(self.headings))]
+        ls = [event] + [(self.formats[i] % entry[self.headings[i]]) for i in range(len(self.headings))]
+        if event == self.vevent:
+            ls.append(self.vformat % entry[self.vheading])
+        return ls
 
     def showHighlights(self, h):
-        print("\t".join(["event"] + self.headings))
+        print("\t".join(["event"] + self.headings + [self.vheading]))
         for event in self.events:
             es = self.estring(event, h)
             print("\t".join(es))
             
+    def tabularizeHighlights(self, h, outfile):
+        outfile.write("\\begin{tabular}{lrrrr}\n")
+        outfile.write("\\multicolumn{5}{l}{\\textbf{%s}} \\\\ \n" % self.root)
+        outfile.write("\\toprule\n")
+        outfile.write("Event & Time & Altitude & Acceleration & Velocity\\\\ \n")
+        outfile.write(" &      ($s$) & ($m$) & ($g$) & $(m/s)$ \\\\ \n")
+        outfile.write("\\midrule\n")
+
+        # Launch
+        accel = h['launch']['accel']
+        outfile.write("Launch & 0.000 & 0.000 & %.3f &  \\\\ \n" % (accel))
+
+        # Max Thrust
+        accel = h['thr-max']['accel']
+        alt = max(0.0,  h['thr-max']['alt']-self.astart)
+        time = h['thr-max']['time'] - self.tstart
+        outfile.write("Max Thrust & %.3f & %.3f & %.3f &  \\\\ \n" % (time, alt, accel))
+
+        
+        # End Thrust
+        alt = h['thr-end']['alt']-self.astart
+        time = h['thr-end']['time'] - self.tstart
+        outfile.write("End Thrust & %.3f & %.3f &  &  \\\\ \n" % (time, alt))
+
+        # Max velocity
+        alt = h['v-max']['alt']-self.astart
+        time = h['v-max']['time'] - self.tstart
+        accel = -h['v-max']['accel']
+        vel = h['v-max']['velocity']
+        outfile.write("Max Velocity & %.3f & %.3f & %.3f & %.3f \\\\ \n" % (time, alt, accel, vel))
+        
+        # Apogee
+        alt = h['apogee']['alt']-self.astart
+        time = h['apogee']['time'] - self.tstart
+        accel = -h['apogee']['accel']
+        outfile.write("Apogee & %.3f & %.3f & %.3f &  \\\\ \n" % (time, alt, accel))
+
+        # Deploy
+        alt = h['deploy']['alt']-self.astart
+        time = h['deploy']['time'] - self.tstart
+        accel = -h['deploy']['accel']
+        outfile.write("Parachute & %.3f & %.3f & %.3f &  \\\\ \n" % (time, alt, accel))
+
+
+        # Landing
+        time = h['land']['time'] - self.tstart
+        outfile.write("Landing & %.3f & 0.000 &  &  \\\\ \n" % (time))
+
+        outfile.write("\\bottomrule\n")
+        outfile.write("\\end{tabular}\n")
+
+    def deriv(self, coeffs):
+        wcoeffs = [i * coeffs[i] for i in range(len(coeffs))]
+        return wcoeffs[1:]
+
     def altitudeCurve(self, rstart, rend):
         times = self.getNormTimes(rstart, rend)
         altitudes = self.getNormAltitudes(rstart, rend)
@@ -150,10 +253,9 @@ class Evaluator:
         coeffs = np.polynomial.polynomial.polyfit(t, a, 4)
         return list(coeffs)
         
-    def deriv(self, coeffs):
-        wcoeffs = [i * coeffs[i] for i in range(len(coeffs))]
-        return wcoeffs[1:]
-        
+    def velocityCurve(self, rstart, rend):
+        acoeffs = self.altitudeCurve(rstart, rend)
+        return self.deriv(acoeffs)
 
     def ceval(self, coeffs, t):
         pwr = 1.0
@@ -164,21 +266,32 @@ class Evaluator:
             pwr *= nt
         return val + self.astart
         
+    def findMaxVelocity(self):
+        rstart = self.findLaunch()
+        rend = self.findApogee()
+        coeffs = self.velocityCurve(rstart, rend)
+        rbest = -1
+        vbest = -1.0
+        for r in range(rstart, rend):
+            t = self.getFloatField(r, 'time')
+            velo = self.ceval(coeffs, t)
+            if velo > vbest:
+                vbest = velo
+                rbest = r
+        return (rbest, vbest)
 
 def fit(e):
     h = e.highlights()
     elaunch = h['launch']
-    etend = h['thrust']
     eapogee = h['apogee']
     eland = h['land']
     rlaunch = elaunch['row']
-    rtend = etend['row']
     rapogee = eapogee['row']
     rland = eland['row']
     print("Launch:    r=%d, t=%.3f" % (elaunch['row'], elaunch['time']))
     print("Apogee:    r=%d, t=%.3f" % (eapogee['row'], eapogee['time']))    
     coeffs = e.altitudeCurve(rlaunch, rapogee)
-    vcoeffs = e.deriv(coeffs)
+    vcoeffs = e.velocityCurve(rlaunch, rapogee)
     print("Row\tTime\tRTime\tAlt\tCalt\tVelo")
     for r in range(rlaunch, rapogee+1):
         t = e.getFloatField(r, 'time')
@@ -187,7 +300,6 @@ def fit(e):
         calt = e.ceval(coeffs, t)
         velo = e.ceval(vcoeffs, t)
         print("%d\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f" % (r, t, rt, alt, calt, velo))
-
     print("Apogee:        r=%d, t=%.3f" % (eapogee['row'], eapogee['time']))
     print("Land:    r=%d, t=%.3f" % (eland['row'], eland['time']))    
     coeffs = e.altitudeCurve(rapogee, rland)
@@ -205,8 +317,10 @@ def process(file):
     e = Evaluator(file)
     h = e.highlights()
     e.showHighlights(h)
-    fit(e)
-
+    print("")
+    e.tabularizeHighlights(h, sys.stdout)
+    print("")
+    e.plotData(sys.stdout)
             
 def run(name, args):
     infile = sys.stdin
