@@ -12,7 +12,7 @@ class Evaluator:
     root = None
     entries = []
     events = ["launch", "thr-max", "thr-end", "v-max", "apogee", "deploy", "land"]
-    vevent = "v-max"
+    vevents = ["v-max", "land"]
     headings = ["row", "time", "alt", "accel", "accel-X"]
     vheadings = ["row", "time", "alt", "accel", "accel-X", "velocity"]
     vheading = "velocity"
@@ -155,6 +155,7 @@ class Evaluator:
         rapogee = self.findApogee()
         rdeploy = self.findDeploy()
         rland = self.findLand()
+        vland = self.findLandVelocity()
         rows = [rlaunch, rtmax, rtend, rvmax, rapogee, rdeploy, rland]
         result = {}
         for idx in range(len(rows)):
@@ -167,8 +168,10 @@ class Evaluator:
                 vals = [times[r], altitudes[r], accelerations[r], accelerationXs[r]]
             for i in range(4):
                 entry[self.headings[i+1]] = vals[i]
-            if event == self.vevent:
-                entry[self.vheading] = vmax
+            if event in self.vevents:
+                entry[self.vheading] = vmax if event ==  'v-max' else vland
+            if event == 'land':
+                entry[self.vheading] = vland
             result[event] = entry
         return result
 
@@ -180,7 +183,7 @@ class Evaluator:
     def estring(self, event, h):
         entry = h[event]
         ls = [event] + [(self.formats[i] % entry[self.headings[i]]) for i in range(len(self.headings))]
-        if event == self.vevent:
+        if event in self.vevents:
             ls.append(self.vformat % entry[self.vheading])
         return ls
 
@@ -194,8 +197,8 @@ class Evaluator:
         outfile.write("\\begin{tabular}{lrrrr}\n")
         outfile.write("\\multicolumn{5}{l}{\\textbf{%s}} \\\\ \n" % self.root)
         outfile.write("\\toprule\n")
-        outfile.write("Event & \\makebox[15mm]{Time} & \\makebox[15mm]{Altitude} & \\makebox[15mm]{Acceleration} & \\makebox[15mm]{Velocity}\\\\ \n")
-        outfile.write(" &      \\makebox[15mm]{(seconds)} & \\makebox[15mm]{(meters)} & \\makebox[15mm]{(g)} & \\makebox[15mm]{(m/s)} \\\\ \n")
+        outfile.write("Event & \\makebox[25mm]{Time} & \\makebox[25mm]{Altitude} & \\makebox[25mm]{Acceleration} & \\makebox[25mm]{Velocity}\\\\ \n")
+        outfile.write(" &      \\makebox[25mm]{(seconds)} & \\makebox[25mm]{(meters)} & \\makebox[25mm]{(g)} & \\makebox[25mm]{(m/s)} \\\\ \n")
         outfile.write("\\midrule\n")
 
         # Launch
@@ -236,7 +239,8 @@ class Evaluator:
 
         # Landing
         time = h['land']['time'] - self.tstart
-        outfile.write("Landing & %.3f & 0.000 &  &  \\\\ \n" % (time))
+        vel = h['land']['velocity']
+        outfile.write("Landing & %.3f & 0.000 &  & %.3f \\\\ \n" % (time, vel))
 
         outfile.write("\\bottomrule\n")
         outfile.write("\\end{tabular}\n")
@@ -280,6 +284,26 @@ class Evaluator:
                 rbest = r
         return (rbest, vbest)
 
+    def findLandVelocity(self):
+        rapogee = self.findApogee()
+        rland = self.findLand()
+        times = self.getTimes()
+        accelerations = self.getAccelerations()
+        tland = times[rland]
+        # Find interval before landing
+        for rprev in range(rland, rapogee, -1):
+            if accelerations[rprev] <= 1.0:
+                break
+        tprev = times[rprev]
+        for rstart in range(rprev, rapogee, -1):
+            tstart = times[rstart]
+            if tstart <= tprev-2.0:
+                break
+        coeffs = self.velocityCurve(rstart, rprev+1)
+        tavg = (tstart + tprev)//2
+        velo = self.ceval(coeffs, tavg)
+        return velo
+
 def fit(e):
     h = e.highlights()
     elaunch = h['launch']
@@ -313,27 +337,21 @@ def fit(e):
         print("%d\t%.3f\t%.3f\t%.3f\t%.3f" % (r, t, alt, calt, velo))
 
 
-def process(file):
-    e = Evaluator(file)
+def process(root):
+    e = Evaluator(root)
     h = e.highlights()
     e.showHighlights(h)
-    print("")
-    e.tabularizeHighlights(h, sys.stdout)
-    print("")
-    e.plotData(sys.stdout)
             
 def run(name, args):
-    infile = sys.stdin
-    if len(args) == 1 and args[0] == '-h' or len(args) > 1:
-        print("Usage: %s [-h] [INFILE]" % name)
+    root = None
+    if len(args) == 1 and args[0] == '-h' or len(args) != 1:
+        print("Usage: %s [-h] ROOT" % name)
         return
-    if len(args) == 1:
-        try:
-            infile = open(args[0], 'r')
-        except:
-            print("Couldn't open file '%s'" % args[0])
-            return
-    process(infile)
+    root = args[0]
+    fields = root.split(".")
+    if len(fields) > 1 and fields[-1] == 'csv':
+        root = ".".join(fields[:-1])
+    process(root)
 
 
 if __name__ == "__main__":
