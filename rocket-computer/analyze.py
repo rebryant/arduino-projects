@@ -11,7 +11,7 @@ class Evaluator:
 #    All entries are text
     root = None
     entries = []
-    events = ["launch", "thr-max", "thr-end", "v-max", "apogee", "deploy", "land"]
+    events = ["launch", "thr-max", "second", "thr-end", "v-max", "apogee", "deploy", "land"]
     vevents = ["v-max", "land"]
     headings = ["row", "time", "alt", "accel", "accel-X"]
     vheadings = ["row", "time", "alt", "accel", "accel-X", "velocity"]
@@ -69,7 +69,6 @@ class Evaluator:
         altitudes = self.getAltitudes()
         return [max(0, altitudes[r]-self.astart) for r in range(rstart, rend+1)]
 
-
     def findLaunch(self):
         accelerations = self.getAccelerations()
         for r in range(self.count()):
@@ -98,6 +97,19 @@ class Evaluator:
                 return r
         return -1
         
+    def findSecondStage(self):
+        rstart = self.findLaunch()
+        if rstart < 0:
+            return rstart
+        rend = self.findThrustEnd()
+        if rend < 0:
+            return rend
+        accelerations = self.getAccelerations()
+        for r in range(rstart, rend):
+            if accelerations[r] < 1.0:
+                return r+1
+        return -1
+
     def findApogee(self):
         altitudes = self.getAltitudes()
         bestHeight = max(altitudes)
@@ -148,22 +160,22 @@ class Evaluator:
         accelerations = self.getAccelerations()
         accelerationXs = self.getAccelerationXs()
         rlaunch = self.findLaunch()
+        rsecond = self.findSecondStage()
         rtmax = self.findThrustMax()
         rtend = self.findThrustEnd()
-
         rvmax, vmax = self.findMaxVelocity()
         rapogee = self.findApogee()
         rdeploy = self.findDeploy()
         rland = self.findLand()
         vland = self.findLandVelocity()
-        rows = [rlaunch, rtmax, rtend, rvmax, rapogee, rdeploy, rland]
+
+        rows = [rlaunch, rtmax, rsecond, rtend, rvmax, rapogee, rdeploy, rland]
+        epairs = [(row, event) for row,event in zip(rows, self.events) if row >= 0]
         result = {}
-        for idx in range(len(rows)):
-            event = self.events[idx]
-            r = rows[idx]
+        for r, event in epairs:
             entry = { self.headings[0] : r }
             if r < 0:
-                vals = [-1] * 4
+                continue
             else:
                 vals = [times[r], altitudes[r], accelerations[r], accelerationXs[r]]
             for i in range(4):
@@ -181,6 +193,8 @@ class Evaluator:
         return (t, a)
 
     def estring(self, event, h):
+        if event not in h:
+            return None
         entry = h[event]
         ls = [event] + [(self.formats[i] % entry[self.headings[i]]) for i in range(len(self.headings))]
         if event in self.vevents:
@@ -191,7 +205,8 @@ class Evaluator:
         print("\t".join(["event"] + self.headings + [self.vheading]))
         for event in self.events:
             es = self.estring(event, h)
-            print("\t".join(es))
+            if es is not None:
+                print("\t".join(es))
             
     def tabularizeHighlights(self, h, outfile):
         outfile.write("\\begin{tabular}{lrrrr}\n")
@@ -204,6 +219,12 @@ class Evaluator:
         # Launch
         accel = h['launch']['accel']
         outfile.write("Launch & 0.000 & 0.000 & %.3f &  \\\\ \n" % (accel))
+
+        # Second stage
+        if 'second' in h:
+            alt = max(0.0, h['second']['alt']-self.astart)
+            time = h['second']['time'] - self.tstart
+            outfile.write("Second Stage & %.3f & %.3f &  &  \\\\ \n" % (time, alt))
 
         # Max Thrust
         accel = h['thr-max']['accel']
@@ -303,6 +324,27 @@ class Evaluator:
         tavg = (tstart + tprev)//2
         velo = self.ceval(coeffs, tavg)
         return velo
+
+    def interpolateValue(self, t, tbefore, tafter, vbefore, vafter):
+        if tbefore == tafter:
+            return (vbefore+vafter)/2.0
+        wt = (t-tbefore)/(tafter-tbefore)
+        return wt*vbefore + (1.0-wt)*vafter
+        
+    def valueSequence(self, values, tstart, tduration, tdelta):
+        sequence = []
+        times = self.getTimes()
+        t = tstart
+        r = 0
+        while t <= tstart + tduration:
+            while times[r] < t:
+                r += 1
+            sequence.append(self.interpolateValue(t, times[r-1], times[r], values[r-1], values[r]))
+            t += tdelta
+        return sequence
+
+        
+        
 
 def fit(e):
     h = e.highlights()
