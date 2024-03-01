@@ -41,16 +41,25 @@ class Evaluator:
         return len(self.entries)
 
     def getField(self, row, kw):
+        if row < 0 or row >= self.count():
+            return ""
         return self.entries[row][kw]
 
     def getIntField(self, row, kw):
+        if row < 0 or row >= self.count():
+            return 0
         return int(self.getField(row, kw))
 
     def getFloatField(self, row, kw):
+        if row < 0 or row >= self.count():
+            return 0.0
         return float(self.getField(row, kw))
 
     def getTimes(self):
         return [self.getFloatField(r, "time") for r in range(self.count())]
+
+    def getFinalTime(self):
+        return self.getFloatField(self.count()-1, "time")
 
     def getAltitudes(self):
         return [self.getFloatField(r, "altitude") for r in range(self.count())]
@@ -337,9 +346,14 @@ class Evaluator:
         t = tstart
         r = 0
         while t <= tstart + tduration:
-            while times[r] < t:
-                r += 1
-            sequence.append(self.interpolateValue(t, times[r-1], times[r], values[r-1], values[r]))
+            if t <= 0:
+                sequence.append(values[0])
+            elif t >= times[-1]:
+                sequence.append(values[-1])
+            else:
+                while times[r] < t:
+                    r += 1
+                sequence.append(self.interpolateValue(t, times[r-1], times[r], values[r-1], values[r]))
             t += tdelta
         return sequence
 
