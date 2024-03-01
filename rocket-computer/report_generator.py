@@ -101,6 +101,8 @@ def finishGraph(outfile):
     skipline(1, outfile)
 
 def buildGraph(outfile):
+    foundSecond = False
+    secondStageString = "\\addplot [only marks, color=red, mark options={scale=1.0}, mark=pentagon*] coordinates {"
     endThrustString = "\\addplot [only marks, color=red, mark options={scale=1.0}, mark=square*] coordinates {"
     deployString = "\\addplot [only marks, color=red, mark options={scale=2.0}, mark=diamond*] coordinates {"
     legendString = "\\legend{"
@@ -115,6 +117,13 @@ def buildGraph(outfile):
         legendString += " %s," % e.root
         endThrustString += " (%.2f,%.2f)" % e.getCoordinate('thr-end', h)
         deployString += " (%.2f,%.2f)" % e.getCoordinate('deploy', h)
+        if 'second' in h:
+            foundSecond = True
+            secondStageString += " (%.2f,%.2f)" % e.getCoordinate('second', h)
+    if foundSecond:
+        secondStageString += "};\n"
+        outfile.write(secondStageString)
+        legendString += " Second Stage, "
     endThrustString += "};\n"
     outfile.write(endThrustString)
     deployString += "};\n"
