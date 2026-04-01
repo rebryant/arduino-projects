@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/opt/homebrew/bin/python3
 
 # Generate Latex file containing results from set of rocket launches
 

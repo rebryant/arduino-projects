@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/opt/homebrew/bin/python3
 # Support for GUI to visualize rocket telemetry data
 
 from tkinter import *

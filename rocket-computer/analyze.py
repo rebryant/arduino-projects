@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/opt/homebrew/bin/python3
 
 # Analyze properties of flight from CSV representation of its log.
 
