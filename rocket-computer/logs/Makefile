@@ -10,7 +10,7 @@ CSV3 = 2024-07-20-ukraine-C6-unstable.csv
 
 CSV4 = 2024-08-12-UkraineII-B6.csv 2024-08-12-UkraineII-C6.csv
 
-CSV5 = 2026-04-01-UkraineII-C6.csv
+CSV5 = 2026-04-01-UkraineII-C6.csv 2026-04-04-UkraineII-C6.csv
 
 rock1: ../tex/2024-02-11-rockets.pdf
 
@@ -20,7 +20,7 @@ rock3: ../tex/2024-07-20-unstable.pdf
 
 rock4: ../tex/2024-08-12-rockets.pdf
 
-rock5: ../tex/2026-04-01-rockets.pdf
+rock5: ../tex/2026-04-01+04-rockets.pdf
 
 ../tex/2024-02-11-rockets.pdf: $(CSV1)
 	$(INTERP) $(GEN) -t "11 Feb 2024 Rockets" -o ../tex/2024-02-11-rockets.tex $(CSV1)
@@ -38,6 +38,6 @@ rock5: ../tex/2026-04-01-rockets.pdf
 	$(INTERP) $(GEN) -t "12 Aug 2024 Rockets" -o ../tex/2024-08-12-rockets.tex $(CSV4)
 	pushd ../tex ; pdflatex 2024-08-12-rockets ; popd
 
-../tex/2026-04-01-rockets.pdf: $(CSV5)
-	$(INTERP) $(GEN) -t "01 Apr 2026 Rockets" -o ../tex/2026-04-01-rockets.tex $(CSV5)
-	pushd ../tex ; pdflatex 2026-04-01-rockets ; pdflatex 2026-04-01-rockets ; popd
+../tex/2026-04-01+04-rockets.pdf: $(CSV5)
+	$(INTERP) $(GEN) -t "01 Apr 2026 Rockets" -o ../tex/2026-04-01+04-rockets.tex $(CSV5)
+	pushd ../tex ; pdflatex 2026-04-01+04-rockets ; pdflatex 2026-04-01+04-rockets ; popd

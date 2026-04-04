@@ -354,7 +354,14 @@ class Video:
         audio = ffmpeg.input(self.audioName).audio
         if os.path.exists(outName):
             os.remove(outName)
-        ffmpeg.output(video, audio, outName).run(quiet=self.quiet())
+        try:
+            ffmpeg.output(video, audio, outName).run(capture_stdout=True,
+                                                     capture_stderr=True,
+                                                     quiet=self.quiet())
+        except Exception as e:
+            print('stdout:', e.stdout.decode('utf8'))
+            print('stderr:', e.stderr.decode('utf8'))
+            sys.exit(1)
         self.report(1, "Generated video file %s" % outName)
 
     def clean(self):
